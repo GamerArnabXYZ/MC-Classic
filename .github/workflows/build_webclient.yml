@@ -1,0 +1,171 @@
+name: Build & Deploy Webclient
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    container:
+      image: trzeci/emscripten-fastcomp:1.39.0
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          
+      - name: Compile webclient (Old Device Support)
+        run: |
+          # Compile with maximum compatibility for old devices
+          emcc src/*.c src/webclient/*.c -o ClassiCube.js \
+            -s WASM=0 \
+            -s NO_EXIT_RUNTIME=1 \
+            -s LEGACY_VM_SUPPORT=1 \
+            -s ALLOW_MEMORY_GROWTH=1 \
+            -s ABORTING_MALLOC=0 \
+            -s ENVIRONMENT=web \
+            -s TOTAL_STACK=256Kb \
+            -s TOTAL_MEMORY=64MB \
+            -s SAFE_HEAP=0 \
+            -s ASSERTIONS=0 \
+            -s ALIASING_FUNCTION_POINTERS=1 \
+            -s DISABLE_EXCEPTION_CATCHING=1 \
+            --js-library src/webclient/interop_web.js \
+            -Os \
+            -g0 \
+            -s SINGLE_FILE \
+            -Wno-implicit-function-declaration
+          
+          # Fix touch/scroll events for better mobile support
+          sed -i 's#eventHandler.useCapture);#{ useCapture: eventHandler.useCapture, passive: false });#g' ClassiCube.js
+          
+          # Create HTML wrapper for easy testing
+          cat > index.html << 'HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ClassiCube - Minecraft Classic Web Client</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            background: #000;
+            overflow: hidden;
+            touch-action: none;
+            -ms-touch-action: none;
+        }
+        
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+            touch-action: none;
+        }
+        
+        canvas:active {
+            cursor: grabbing;
+        }
+        
+        /* Loading indicator for old devices */
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: monospace;
+            font-size: 14px;
+            text-align: center;
+            z-index: 1000;
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            #loading { font-size: 12px; padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading ClassiCube...<br>Please wait</div>
+    <script>
+        // Remove loading indicator when game starts
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                var loading = document.getElementById('loading');
+                if (loading) loading.style.display = 'none';
+            }, 1000);
+        });
+    </script>
+    <script src="ClassiCube.js"></script>
+</body>
+</html>
+HTML
+          
+      - name: Prepare deployment
+        run: |
+          # Create deployment directory
+          mkdir deploy
+          cp ClassiCube.js deploy/
+          cp index.html deploy/
+          
+          # Create README for web branch
+          cat > deploy/README.md << 'EOF'
+# ClassiCube Web Client
+
+Play Minecraft Classic directly in your browser!
+
+## How to Play
+- Open `index.html` in any modern browser
+- Works on desktop and mobile devices
+- Touch controls on mobile, keyboard/mouse on desktop
+
+## Features
+- ✅ Full Minecraft Classic gameplay
+- ✅ Multiplayer support
+- ✅ Touch controls for mobile
+- ✅ Works on older devices
+- ✅ No installation required
+
+## Supported Browsers
+- Chrome 30+
+- Firefox 30+
+- Safari 10+
+- Edge 15+
+- Opera 17+
+- iOS Safari 10+
+- Android Browser 4.4+
+EOF
+          
+      - name: Deploy to web branch
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: web
+          publish_dir: ./deploy
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Deploy web client - ${{ github.sha }}'
+          
+      - name: Upload artifact (optional backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: classicube-web-client
+          path: deploy/
+          retention-days: 30
