@@ -20,9 +20,8 @@ jobs:
         with:
           persist-credentials: false
           
-      - name: Compile webclient (Old Device Support)
+      - name: Compile webclient
         run: |
-          # Compile with maximum compatibility for old devices
           emcc src/*.c src/webclient/*.c -o ClassiCube.js \
             -s WASM=0 \
             -s NO_EXIT_RUNTIME=1 \
@@ -42,111 +41,56 @@ jobs:
             -s SINGLE_FILE \
             -Wno-implicit-function-declaration
           
-          # Fix touch/scroll events for better mobile support
           sed -i 's#eventHandler.useCapture);#{ useCapture: eventHandler.useCapture, passive: false });#g' ClassiCube.js
           
-          # Create HTML wrapper for easy testing
-          cat > index.html << 'HTMLEOF'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>ClassiCube - Minecraft Classic Web Client</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-        }
-        body {
-            background: #000;
-            overflow: hidden;
-            touch-action: none;
-            -ms-touch-action: none;
-        }
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            cursor: grab;
-            touch-action: none;
-        }
-        canvas:active {
-            cursor: grabbing;
-        }
-        #loading {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-family: monospace;
-            font-size: 14px;
-            text-align: center;
-            z-index: 1000;
-            background: rgba(0,0,0,0.8);
-            padding: 20px;
-            border-radius: 10px;
-        }
-        @media (max-width: 768px) {
-            #loading {
-                font-size: 12px;
-                padding: 15px;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div id="loading">Loading ClassiCube...<br>Please wait</div>
-    <script>
-        window.addEventListener('load', function() {
-            setTimeout(function() {
-                var loading = document.getElementById('loading');
-                if (loading) loading.style.display = 'none';
-            }, 1000);
-        });
-    </script>
-    <script src="ClassiCube.js"></script>
-</body>
-</html>
-HTMLEOF
+      - name: Create HTML wrapper
+        run: |
+          echo '<!DOCTYPE html>' > index.html
+          echo '<html lang="en">' >> index.html
+          echo '<head>' >> index.html
+          echo '    <meta charset="UTF-8">' >> index.html
+          echo '    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">' >> index.html
+          echo '    <title>ClassiCube - Minecraft Classic</title>' >> index.html
+          echo '    <style>' >> index.html
+          echo '        * { margin: 0; padding: 0; box-sizing: border-box; }' >> index.html
+          echo '        body { background: #000; overflow: hidden; touch-action: none; }' >> index.html
+          echo '        canvas { display: block; width: 100%; height: 100%; cursor: grab; }' >> index.html
+          echo '        #loading { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-family: monospace; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; }' >> index.html
+          echo '    </style>' >> index.html
+          echo '</head>' >> index.html
+          echo '<body>' >> index.html
+          echo '    <div id="loading">Loading ClassiCube...<br>Please wait</div>' >> index.html
+          echo '    <script>' >> index.html
+          echo '        window.addEventListener("load", function() {' >> index.html
+          echo '            setTimeout(function() {' >> index.html
+          echo '                var loading = document.getElementById("loading");' >> index.html
+          echo '                if (loading) loading.style.display = "none";' >> index.html
+          echo '            }, 1000);' >> index.html
+          echo '        });' >> index.html
+          echo '    </script>' >> index.html
+          echo '    <script src="ClassiCube.js"></script>' >> index.html
+          echo '</body>' >> index.html
+          echo '</html>' >> index.html
           
       - name: Prepare deployment
         run: |
-          # Create deployment directory
-          mkdir deploy
+          mkdir -p deploy
           cp ClassiCube.js deploy/
           cp index.html deploy/
           
-          # Create README for web branch
-          cat > deploy/README.md << 'EOF'
-# ClassiCube Web Client
-
-Play Minecraft Classic directly in your browser!
-
-## How to Play
-- Open `index.html` in any modern browser
-- Works on desktop and mobile devices
-- Touch controls on mobile, keyboard/mouse on desktop
-
-## Features
-- ✅ Full Minecraft Classic gameplay
-- ✅ Multiplayer support
-- ✅ Touch controls for mobile
-- ✅ Works on older devices
-- ✅ No installation required
-
-## Supported Browsers
-- Chrome 30+
-- Firefox 30+
-- Safari 10+
-- Edge 15+
-- Opera 17+
-- iOS Safari 10+
-- Android Browser 4.4+
-EOF
+          echo "# ClassiCube Web Client" > deploy/README.md
+          echo "" >> deploy/README.md
+          echo "Play Minecraft Classic directly in your browser!" >> deploy/README.md
+          echo "" >> deploy/README.md
+          echo "## How to Play" >> deploy/README.md
+          echo "- Open \`index.html\` in any modern browser" >> deploy/README.md
+          echo "- Works on desktop and mobile devices" >> deploy/README.md
+          echo "" >> deploy/README.md
+          echo "## Features" >> deploy/README.md
+          echo "- Full Minecraft Classic gameplay" >> deploy/README.md
+          echo "- Multiplayer support" >> deploy/README.md
+          echo "- Touch controls for mobile" >> deploy/README.md
+          echo "- Works on older devices" >> deploy/README.md
           
       - name: Deploy to web branch
         uses: peaceiris/actions-gh-pages@v3
@@ -159,7 +103,7 @@ EOF
           user_email: 'github-actions[bot]@users.noreply.github.com'
           commit_message: 'Deploy web client - ${{ github.sha }}'
           
-      - name: Upload artifact (optional backup)
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: classicube-web-client
