@@ -46,7 +46,7 @@ jobs:
           sed -i 's#eventHandler.useCapture);#{ useCapture: eventHandler.useCapture, passive: false });#g' ClassiCube.js
           
           # Create HTML wrapper for easy testing
-          cat > index.html << 'HTML'
+          cat > index.html << 'HTMLEOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -60,14 +60,12 @@ jobs:
             box-sizing: border-box;
             -webkit-tap-highlight-color: transparent;
         }
-        
         body {
             background: #000;
             overflow: hidden;
             touch-action: none;
             -ms-touch-action: none;
         }
-        
         canvas {
             display: block;
             width: 100%;
@@ -75,12 +73,9 @@ jobs:
             cursor: grab;
             touch-action: none;
         }
-        
         canvas:active {
             cursor: grabbing;
         }
-        
-        /* Loading indicator for old devices */
         #loading {
             position: fixed;
             top: 50%;
@@ -95,16 +90,17 @@ jobs:
             padding: 20px;
             border-radius: 10px;
         }
-        
         @media (max-width: 768px) {
-            #loading { font-size: 12px; padding: 15px; }
+            #loading {
+                font-size: 12px;
+                padding: 15px;
+            }
         }
     </style>
 </head>
 <body>
     <div id="loading">Loading ClassiCube...<br>Please wait</div>
     <script>
-        // Remove loading indicator when game starts
         window.addEventListener('load', function() {
             setTimeout(function() {
                 var loading = document.getElementById('loading');
@@ -115,7 +111,7 @@ jobs:
     <script src="ClassiCube.js"></script>
 </body>
 </html>
-HTML
+HTMLEOF
           
       - name: Prepare deployment
         run: |
