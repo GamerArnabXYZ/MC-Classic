@@ -21,9 +21,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Compile webclient with debug
+      - name: Compile webclient
         run: |
-          # Compile with debug output
           emcc src/*.c src/webclient/*.c -o ClassiCube.js \
             -s WASM=0 \
             -s NO_EXIT_RUNTIME=1 \
@@ -42,102 +41,167 @@ jobs:
             -g2 \
             -s SINGLE_FILE \
             -Wno-implicit-function-declaration \
-            -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
             -s EXPORTED_FUNCTIONS='["_main", "_android_main"]' \
-            -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "addFunction"]'
+            -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]'
           
-          # Fix passive event listeners
           sed -i 's#eventHandler.useCapture);#{ useCapture: eventHandler.useCapture, passive: false });#g' ClassiCube.js
           
-          # Also fix any other potential issues
-          sed -i 's/Module\["canvas"\]/Module.canvas/g' ClassiCube.js 2>/dev/null || true
-          
-      - name: Create HTML wrapper with error handling
+      - name: Create HTML wrapper with Module support
         run: |
-          cat <<EOF > index.html
+          cat <<'EOF' > index.html
           <!DOCTYPE html>
           <html lang="en">
           <head>
               <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, shrink-to-fit=no">
               <title>ClassiCube - Minecraft Classic</title>
               <style>
-                  * { margin: 0; padding: 0; box-sizing: border-box; }
-                  body { background: #000; overflow: hidden; touch-action: none; }
-                  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
-                  #loading { 
-                      position: fixed; 
-                      top: 50%; 
-                      left: 50%; 
-                      transform: translate(-50%, -50%); 
-                      color: white; 
-                      font-family: monospace; 
-                      background: rgba(0,0,0,0.9); 
-                      padding: 20px; 
-                      border-radius: 10px; 
-                      z-index: 100;
+                  * {
+                      margin: 0;
+                      padding: 0;
+                      box-sizing: border-box;
+                      user-select: none;
+                      -webkit-tap-highlight-color: transparent;
+                  }
+                  body {
+                      background: #000;
+                      overflow: hidden;
+                      touch-action: none;
+                      position: fixed;
+                      width: 100%;
+                      height: 100%;
+                  }
+                  canvas {
+                      display: block;
+                      width: 100%;
+                      height: 100%;
+                      cursor: grab;
+                      touch-action: none;
+                      outline: none;
+                  }
+                  canvas:active {
+                      cursor: grabbing;
+                  }
+                  #loading {
+                      position: fixed;
+                      top: 50%;
+                      left: 50%;
+                      transform: translate(-50%, -50%);
+                      color: #fff;
+                      font-family: 'Courier New', monospace;
+                      background: rgba(0,0,0,0.9);
+                      padding: 20px 30px;
+                      border-radius: 10px;
+                      z-index: 1000;
                       text-align: center;
+                      border: 1px solid #444;
+                      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+                  }
+                  #loading-status {
+                      margin-top: 10px;
+                      font-size: 12px;
+                      color: #aaa;
                   }
                   #error {
                       position: fixed;
                       bottom: 20px;
                       left: 20px;
                       right: 20px;
-                      color: red;
+                      color: #f00;
                       background: rgba(0,0,0,0.8);
                       padding: 10px;
                       font-family: monospace;
                       font-size: 12px;
                       display: none;
-                      z-index: 200;
+                      z-index: 2000;
+                      border-radius: 5px;
+                  }
+                  @media (max-width: 768px) {
+                      #loading { font-size: 14px; padding: 15px 20px; }
+                      #loading-status { font-size: 10px; }
                   }
               </style>
           </head>
           <body>
               <div id="loading">
-                  Loading ClassiCube...<br>
-                  <span style="font-size: 12px;">Please wait (may take 30-60 seconds)</span>
+                  <div>🎮 ClassiCube</div>
+                  <div id="loading-status">Loading game...</div>
               </div>
               <div id="error"></div>
+              
               <script>
-                  // Error handling
+                  // Error handler
                   window.onerror = function(msg, url, line, col, error) {
                       var errorDiv = document.getElementById('error');
                       errorDiv.innerHTML = 'Error: ' + msg + '<br>Line: ' + line;
                       errorDiv.style.display = 'block';
-                      console.error('Game error:', msg, url, line);
+                      console.error('Game error:', msg, url, line, error);
                       return false;
                   };
                   
-                  // Wait for load
-                  window.addEventListener("load", function() {
-                      console.log("Page loaded, starting ClassiCube...");
-                      
-                      // Hide loading after a delay or when game starts
-                      setTimeout(function() {
-                          var loading = document.getElementById("loading");
-                          if (loading) loading.style.display = "none";
-                      }, 5000);
-                  });
+                  // Module object with required functions
+                  var Module = {
+                      canvas: null,
+                      setStatus: function(text) {
+                          var statusDiv = document.getElementById('loading-status');
+                          if (statusDiv) {
+                              statusDiv.innerHTML = text || 'Ready...';
+                          }
+                          console.log('Status:', text);
+                          
+                          // Hide loading when game is ready
+                          if (text && text.indexOf('Running') !== -1) {
+                              setTimeout(function() {
+                                  var loading = document.getElementById('loading');
+                                  if (loading) {
+                                      loading.style.opacity = '0';
+                                      setTimeout(function() {
+                                          if (loading) loading.style.display = 'none';
+                                      }, 500);
+                                  }
+                              }, 500);
+                          }
+                      },
+                      print: function(text) {
+                          console.log('[ClassiCube]', text);
+                      },
+                      printErr: function(text) {
+                          console.error('[ClassiCube]', text);
+                      },
+                      preRun: [],
+                      postRun: [],
+                      onAbort: function(what) {
+                          console.error('Abort:', what);
+                          var errorDiv = document.getElementById('error');
+                          errorDiv.innerHTML = 'Game crashed: ' + what;
+                          errorDiv.style.display = 'block';
+                      }
+                  };
                   
-                  // Log when script starts
-                  console.log("ClassiCube script loading...");
+                  // Create canvas when page loads
+                  window.addEventListener('load', function() {
+                      console.log('Page loaded, creating canvas...');
+                      
+                      // Create canvas element
+                      var canvas = document.createElement('canvas');
+                      canvas.id = 'canvas';
+                      canvas.width = window.innerWidth;
+                      canvas.height = window.innerHeight;
+                      document.body.appendChild(canvas);
+                      Module.canvas = canvas;
+                      
+                      // Handle resize
+                      window.addEventListener('resize', function() {
+                          if (Module.canvas) {
+                              Module.canvas.width = window.innerWidth;
+                              Module.canvas.height = window.innerHeight;
+                          }
+                      });
+                      
+                      Module.setStatus('Starting game...');
+                  });
               </script>
               <script src="ClassiCube.js"></script>
-          </body>
-          </html>
-          EOF
-          
-      - name: Create test page
-        run: |
-          cat <<EOF > deploy-test.html
-          <!DOCTYPE html>
-          <html>
-          <head><title>Test Page</title></head>
-          <body>
-              <h1>ClassiCube Test Page</h1>
-              <p>If you see this, the server is working.</p>
-              <p>Game should be at <a href="index.html">index.html</a></p>
           </body>
           </html>
           EOF
@@ -147,31 +211,46 @@ jobs:
           mkdir -p deploy
           cp ClassiCube.js deploy/
           cp index.html deploy/
-          cp deploy-test.html deploy/
           
-          # Check file sizes
-          echo "Build files:" >> build-info.txt
-          ls -lh ClassiCube.js >> build-info.txt
-          echo "File size: $(du -h ClassiCube.js | cut -f1)" >> build-info.txt
-          cp build-info.txt deploy/
+          # Create a simple test page
+          cat <<'EOF' > deploy/test.html
+          <!DOCTYPE html>
+          <html>
+          <head><title>ClassiCube Test</title></head>
+          <body style="background:#000;color:#fff;font-family:monospace;padding:20px">
+              <h1>ClassiCube Web Client</h1>
+              <p>If you see this, the server is working.</p>
+              <p>Game should be at <a href="index.html" style="color:#0f0">index.html</a></p>
+              <hr>
+              <p>Status: <span id="status" style="color:#0f0">Ready</span></p>
+              <button onclick="location.href='index.html'" style="padding:10px;margin-top:20px">Launch Game</button>
+          </body>
+          </html>
+          EOF
           
-          cat <<EOF > deploy/README.md
+          cat <<'EOF' > deploy/README.md
           # ClassiCube Web Client
           
-          Play Minecraft Classic directly in your browser!
+          ## Play Minecraft Classic in your browser!
           
-          ## How to Play
-          1. Open index.html
-          2. Wait for game to load (may take 30-60 seconds)
+          ### How to Play:
+          1. Open [index.html](index.html)
+          2. Wait for the game to load
           3. Use WASD or arrow keys to move
           4. Mouse to look around
-          5. Touch controls on mobile
+          5. Touch controls on mobile devices
           
-          ## If Black Screen:
+          ### Features:
+          - Full Minecraft Classic gameplay
+          - Multiplayer support
+          - Works on desktop and mobile
+          - Touch screen controls
+          
+          ### If the game doesn't load:
+          - Refresh the page
           - Check browser console (F12) for errors
-          - Try refreshing the page
+          - Try a different browser (Chrome, Firefox, Edge)
           - Make sure JavaScript is enabled
-          - Try a different browser
           EOF
           
       - name: Deploy to web branch
@@ -183,7 +262,7 @@ jobs:
           force_orphan: true
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Deploy web client - ${{ github.sha }}'
+          commit_message: 'Deploy web client with fixed Module.setStatus - ${{ github.sha }}'
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
