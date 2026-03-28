@@ -7,7 +7,6 @@ on:
       - master
   workflow_dispatch:
 
-# Added permissions to allow the GITHUB_TOKEN to write to the 'web' branch
 permissions:
   contents: write
 
@@ -16,17 +15,15 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     container:
-      # Note: This is an older image. If you encounter issues, 
-      # consider 'emscripten/emsdk:latest'
       image: trzeci/emscripten-fastcomp:1.39.0
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Compile webclient
+      - name: Compile webclient with debug
         run: |
-          # Ensure we are in the workspace and compile
+          # Compile with debug output
           emcc src/*.c src/webclient/*.c -o ClassiCube.js \
             -s WASM=0 \
             -s NO_EXIT_RUNTIME=1 \
@@ -37,19 +34,25 @@ jobs:
             -s TOTAL_STACK=256Kb \
             -s TOTAL_MEMORY=64MB \
             -s SAFE_HEAP=0 \
-            -s ASSERTIONS=0 \
+            -s ASSERTIONS=1 \
             -s ALIASING_FUNCTION_POINTERS=1 \
-            -s DISABLE_EXCEPTION_CATCHING=1 \
+            -s DISABLE_EXCEPTION_CATCHING=0 \
             --js-library src/webclient/interop_web.js \
             -Os \
-            -g0 \
+            -g2 \
             -s SINGLE_FILE \
-            -Wno-implicit-function-declaration
+            -Wno-implicit-function-declaration \
+            -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
+            -s EXPORTED_FUNCTIONS='["_main", "_android_main"]' \
+            -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "addFunction"]'
           
-          # Patching the generated JS to fix passive event listener issues
+          # Fix passive event listeners
           sed -i 's#eventHandler.useCapture);#{ useCapture: eventHandler.useCapture, passive: false });#g' ClassiCube.js
           
-      - name: Create HTML wrapper
+          # Also fix any other potential issues
+          sed -i 's/Module\["canvas"\]/Module.canvas/g' ClassiCube.js 2>/dev/null || true
+          
+      - name: Create HTML wrapper with error handling
         run: |
           cat <<EOF > index.html
           <!DOCTYPE html>
@@ -62,20 +65,79 @@ jobs:
                   * { margin: 0; padding: 0; box-sizing: border-box; }
                   body { background: #000; overflow: hidden; touch-action: none; }
                   canvas { display: block; width: 100%; height: 100%; cursor: grab; }
-                  #loading { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-family: monospace; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; z-index: 100; }
+                  #loading { 
+                      position: fixed; 
+                      top: 50%; 
+                      left: 50%; 
+                      transform: translate(-50%, -50%); 
+                      color: white; 
+                      font-family: monospace; 
+                      background: rgba(0,0,0,0.9); 
+                      padding: 20px; 
+                      border-radius: 10px; 
+                      z-index: 100;
+                      text-align: center;
+                  }
+                  #error {
+                      position: fixed;
+                      bottom: 20px;
+                      left: 20px;
+                      right: 20px;
+                      color: red;
+                      background: rgba(0,0,0,0.8);
+                      padding: 10px;
+                      font-family: monospace;
+                      font-size: 12px;
+                      display: none;
+                      z-index: 200;
+                  }
               </style>
           </head>
           <body>
-              <div id="loading">Loading ClassiCube...<br>Please wait</div>
+              <div id="loading">
+                  Loading ClassiCube...<br>
+                  <span style="font-size: 12px;">Please wait (may take 30-60 seconds)</span>
+              </div>
+              <div id="error"></div>
               <script>
+                  // Error handling
+                  window.onerror = function(msg, url, line, col, error) {
+                      var errorDiv = document.getElementById('error');
+                      errorDiv.innerHTML = 'Error: ' + msg + '<br>Line: ' + line;
+                      errorDiv.style.display = 'block';
+                      console.error('Game error:', msg, url, line);
+                      return false;
+                  };
+                  
+                  // Wait for load
                   window.addEventListener("load", function() {
+                      console.log("Page loaded, starting ClassiCube...");
+                      
+                      // Hide loading after a delay or when game starts
                       setTimeout(function() {
                           var loading = document.getElementById("loading");
                           if (loading) loading.style.display = "none";
-                      }, 1000);
+                      }, 5000);
                   });
+                  
+                  // Log when script starts
+                  console.log("ClassiCube script loading...");
               </script>
               <script src="ClassiCube.js"></script>
+          </body>
+          </html>
+          EOF
+          
+      - name: Create test page
+        run: |
+          cat <<EOF > deploy-test.html
+          <!DOCTYPE html>
+          <html>
+          <head><title>Test Page</title></head>
+          <body>
+              <h1>ClassiCube Test Page</h1>
+              <p>If you see this, the server is working.</p>
+              <p>Game should be at <a href="index.html">index.html</a></p>
           </body>
           </html>
           EOF
@@ -85,17 +147,35 @@ jobs:
           mkdir -p deploy
           cp ClassiCube.js deploy/
           cp index.html deploy/
+          cp deploy-test.html deploy/
+          
+          # Check file sizes
+          echo "Build files:" >> build-info.txt
+          ls -lh ClassiCube.js >> build-info.txt
+          echo "File size: $(du -h ClassiCube.js | cut -f1)" >> build-info.txt
+          cp build-info.txt deploy/
           
           cat <<EOF > deploy/README.md
           # ClassiCube Web Client
+          
           Play Minecraft Classic directly in your browser!
+          
           ## How to Play
-          - Open index.html in any modern browser
-          - Works on desktop and mobile devices
+          1. Open index.html
+          2. Wait for game to load (may take 30-60 seconds)
+          3. Use WASD or arrow keys to move
+          4. Mouse to look around
+          5. Touch controls on mobile
+          
+          ## If Black Screen:
+          - Check browser console (F12) for errors
+          - Try refreshing the page
+          - Make sure JavaScript is enabled
+          - Try a different browser
           EOF
           
       - name: Deploy to web branch
-        uses: peaceiris/actions-gh-pages@v4 # Updated to v4
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: web
