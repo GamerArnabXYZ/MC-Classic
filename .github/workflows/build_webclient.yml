@@ -100,81 +100,19 @@ jobs:
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
     <title>ClassiCube - Minecraft Classic</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        html, body {
-            width: 100%;
-            height: 100%;
-            background: #000;
-            overflow: hidden;
-            position: fixed;
-            top: 0;
-            left: 0;
-        }
-        /* Canvas full screen - no borders, no margins */
-        canvas {
-            display: block;
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border: 0;
-            padding: 0;
-            background-color: black;
-            cursor: grab;
-            touch-action: none;
-        }
-        canvas:active {
-            cursor: grabbing;
-        }
-        #logmsg {
-            position: fixed;
-            bottom: 15px;
-            left: 15px;
-            right: 15px;
-            color: #0f0;
-            background: rgba(0,0,0,0.85);
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            padding: 10px 15px;
-            border-radius: 8px;
-            z-index: 1000;
-            pointer-events: none;
-            text-align: center;
-            border: 1px solid rgba(0,255,0,0.3);
-            backdrop-filter: blur(4px);
-        }
-        @media (max-width: 768px) {
-            #logmsg {
-                bottom: 10px;
-                left: 10px;
-                right: 10px;
-                font-size: 10px;
-                padding: 8px 12px;
-            }
-        }
-        /* Landscape mode fix */
-        @media (orientation: landscape) {
-            canvas {
-                object-fit: cover;
-            }
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; background: #000; overflow: hidden; position: fixed; top: 0; left: 0; }
+        canvas { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; padding: 0; background-color: black; cursor: grab; touch-action: none; }
+        canvas:active { cursor: grabbing; }
+        #logmsg { position: fixed; bottom: 15px; left: 15px; right: 15px; color: #0f0; background: rgba(0,0,0,0.85); font-family: 'Courier New', monospace; font-size: 12px; padding: 10px 15px; border-radius: 8px; z-index: 1000; pointer-events: none; text-align: center; border: 1px solid rgba(0,255,0,0.3); backdrop-filter: blur(4px); }
+        @media (max-width: 768px) { #logmsg { bottom: 10px; left: 10px; right: 10px; font-size: 10px; padding: 8px 12px; } }
+        @media (orientation: landscape) { canvas { object-fit: cover; } }
     </style>
 </head>
 <body>
-    <canvas id="canvas" 
-            style="display:block; border:0; padding:0; background-color: black;" 
-            oncontextmenu="event.preventDefault()" 
-            tabindex="-1">
-    </canvas>
+    <canvas id="canvas" style="display:block; border:0; padding:0; background-color: black;" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
     <div id="logmsg">🎮 Loading ClassiCube...</div>
-    
-    <script type='text/javascript'>
-        // Force canvas to fill screen on resize
+    <script>
         function resizeCanvas() {
             var canvas = document.getElementById('canvas');
             if (canvas) {
@@ -182,20 +120,10 @@ jobs:
                 canvas.style.height = window.innerHeight + 'px';
             }
         }
-        
-        // Module object as per official documentation
         var Module = {
-            preRun: [],
-            postRun: [],
-            arguments: [ "Guest" ],
-            print: function(text) {
-                if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-                console.log('[ClassiCube]', text);
-            },
-            printErr: function(text) {
-                if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-                console.error('[ClassiCube]', text);
-            },
+            preRun: [], postRun: [], arguments: [ "Guest" ],
+            print: function(text) { if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' '); console.log('[ClassiCube]', text); },
+            printErr: function(text) { if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' '); console.error('[ClassiCube]', text); },
             canvas: (function() { return document.getElementById('canvas'); })(),
             setStatus: function(text) {
                 console.log('[Status]', text);
@@ -217,44 +145,20 @@ jobs:
                 Module.setStatus(left ? '📦 Loading... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : '🚀 Starting game...');
             }
         };
-        
-        // Initial status
         Module.setStatus('Initializing...');
-        
-        // Resize handler
-        window.addEventListener('resize', function() {
-            setTimeout(resizeCanvas, 100);
-        });
-        window.addEventListener('orientationchange', function() {
-            setTimeout(resizeCanvas, 200);
-        });
+        window.addEventListener('resize', function() { setTimeout(resizeCanvas, 100); });
+        window.addEventListener('orientationchange', function() { setTimeout(resizeCanvas, 200); });
         resizeCanvas();
-        
-        // Error handler
         window.onerror = function(msg, url, line, col, error) {
             Module.setStatus('⚠️ Error: ' + msg);
             Module.printErr('Error: ' + msg + ' at ' + url + ':' + line);
             return false;
         };
-        
-        // Handle visibility change
         document.addEventListener('visibilitychange', function() {
-            if (document.hidden) {
-                console.log('Tab hidden');
-                Module.setStatus('⏸ Paused');
-            } else {
-                console.log('Tab visible');
-                Module.setStatus('▶ Resumed');
-            }
+            if (document.hidden) { console.log('Tab hidden'); Module.setStatus('⏸ Paused'); }
+            else { console.log('Tab visible'); Module.setStatus('▶ Resumed'); }
         });
-        
-        // Touch device detection
-        if ('ontouchstart' in window) {
-            console.log('Touch device detected');
-            Module.setStatus('👆 Touch controls enabled');
-        }
-        
-        // Page ready
+        if ('ontouchstart' in window) { console.log('Touch device detected'); Module.setStatus('👆 Touch controls enabled'); }
         window.addEventListener('load', function() {
             console.log('Page loaded, canvas size:', Module.canvas.clientWidth, 'x', Module.canvas.clientHeight);
             Module.setStatus('🎮 Ready to play!');
