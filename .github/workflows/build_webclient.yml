@@ -23,7 +23,6 @@ jobs:
 
       - name: Compile webclient
         run: |
-          # WASM=0 = asm.js — max compatibility (Android 6, iOS 12)
           emcc src/*.c src/webclient/*.c -o classisphere.js \
             -s WASM=0 \
             -s NO_EXIT_RUNTIME=1 \
@@ -44,303 +43,246 @@ jobs:
             -s EXPORTED_FUNCTIONS='["_main","_interop_LoadIndexedDB"]' \
             -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]'
 
-          # Fix texture pack URL
           sed -i 's|/static/default.zip|texpacks/default.zip|g' classisphere.js
 
-          # Verify sed worked
           COUNT=$(grep -c "texpacks/default.zip" classisphere.js || echo "0")
-          echo "Texture URL replacements found: $COUNT"
-          if [ "$COUNT" = "0" ]; then
-            echo "WARNING: Texture URL sed replacement may have failed!"
-          fi
+          echo "Texture URL replacements: $COUNT"
+          if [ "$COUNT" = "0" ]; then echo "WARNING: sed replace may have failed!"; fi
 
-          # Fix passive event listeners (Android Chrome scroll warning fix)
           sed -i 's#eventHandler.useCapture);#{ useCapture: eventHandler.useCapture, passive: false });#g' classisphere.js
 
           cp classisphere.js ClassiCube.js
-
-          echo "Build completed!"
-          ls -lh classisphere.js
+          echo "Build done!"; ls -lh classisphere.js
 
       - name: Download assets
         run: |
-          echo "Downloading texture pack..."
-          wget -q https://www.classicube.net/static/default.zip || {
-            echo "ERROR: Failed to download default.zip"
-            exit 1
-          }
-
-          echo "Downloading audio pack (optional)..."
-          wget -q https://www.classicube.net/static/audio.zip || echo "Audio pack skipped (non-critical)"
-
-          echo "Assets:"
-          ls -lh *.zip 2>/dev/null || echo "No zip files found"
+          wget -q https://www.classicube.net/static/default.zip || { echo "ERROR: default.zip failed"; exit 1; }
+          wget -q https://www.classicube.net/static/audio.zip || echo "Audio skipped"
+          ls -lh *.zip 2>/dev/null
 
       - name: Create deployment structure
         run: |
-          mkdir -p deploy/texpacks
-          mkdir -p deploy/audio
-
+          mkdir -p deploy/texpacks deploy/audio
           cp classisphere.js deploy/
           cp ClassiCube.js deploy/
           cp default.zip deploy/texpacks/
-          [ -f audio.zip ] && cp audio.zip deploy/audio/ || echo "Skipping audio.zip"
-
-          echo "Deploy structure:"
+          [ -f audio.zip ] && cp audio.zip deploy/audio/ || echo "No audio.zip"
           ls -la deploy/
 
       - name: Create play.html
         run: |
-          cat <<'HTMLEOF' > deploy/play.html
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
-    <meta name="theme-color" content="#715580" />
-    <title>ClassiSphere - Play</title>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
+          python3 - <<'PYEOF'
+          html = """<!doctype html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <meta name="apple-mobile-web-app-capable" content="yes" />
+              <meta name="mobile-web-app-capable" content="yes" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
+              <meta name="theme-color" content="#715580" />
+              <title>ClassiSphere - Play</title>
+              <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                html, body {
+                  width: 100%; height: 100%;
+                  background: #000;
+                  overflow: hidden;
+                  touch-action: none;
+                  -webkit-user-select: none;
+                  user-select: none;
+                }
+                #canvas {
+                  display: block;
+                  border-width: 0px !important;
+                  padding: 0 !important;
+                  margin: 0 auto;
+                  background-color: #715580;
+                  width: 100vw;
+                  height: 100vh;
+                }
+                #logmsg {
+                  font-size: 18px;
+                  font-family: Arial, sans-serif;
+                  text-shadow: 1px 1px 5px rgba(0,0,0,.5);
+                  font-weight: bold;
+                  text-align: center;
+                  white-space: pre-wrap;
+                  color: #FAFAFA;
+                  width: 100%;
+                  position: fixed;
+                  top: 0; left: 0;
+                  z-index: 1000;
+                  pointer-events: none;
+                  padding: 8px;
+                  background: rgba(0,0,0,0.5);
+                }
+                @media (max-width: 480px) { #logmsg { font-size: 13px; } }
+              </style>
+            </head>
+            <body>
+              <canvas class="emscripten" id="canvas"
+                      oncontextmenu="event.preventDefault()"
+                      tabindex="-1" width="1000" height="562">
+              </canvas>
+              <div id="logmsg"></div>
 
-      html, body {
-        width: 100%;
-        height: 100%;
-        background: #000;
-        overflow: hidden;
-        touch-action: none;
-        -webkit-user-select: none;
-        user-select: none;
-      }
+              <script type="text/javascript">
+                function logText(text) {
+                  console.log(text);
+                  var el = document.getElementById('logmsg');
+                  if (el) el.innerHTML = text;
+                }
 
-      /* Original ClassiCube rule — border/padding must be 0 or mouse coords break */
-      #canvas {
-        display: block;
-        border-width: 0px !important;
-        padding: 0 !important;
-        margin: 0 auto;
-        background-color: #715580;
-        width: 100vw;
-        height: 100vh;
-      }
+                var idb = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
+                if (!idb) {
+                  alert('IndexedDB unsupported, maps and settings will not save');
+                  window.mozIndexedDB = {};
+                }
 
-      #logmsg {
-        font-size: 18px;
-        font-family: 'Source Sans Pro', Arial, sans-serif;
-        text-shadow: 1px 1px 5px rgba(0,0,0,.5);
-        font-weight: bold;
-        text-align: center;
-        white-space: pre-wrap;
-        color: #FAFAFA;
-        width: 100%;
-        position: fixed;
-        top: 0;
-        left: 0;
-        z-index: 1000;
-        pointer-events: none;
-        padding: 8px;
-        background: rgba(0,0,0,0.5);
-      }
+                function preloadIndexedDB() { _interop_LoadIndexedDB(); }
 
-      @media (max-width: 480px) {
-        #logmsg { font-size: 13px; }
-      }
-    </style>
-  </head>
-  <body>
+                function forceTouchLayout() {
+                  try {
+                    var f = document.getElementById('footer');
+                    if (f) f.parentNode.removeChild(f);
+                    var c = document.getElementById('content');
+                    if (c) c.parentNode.removeChild(c);
+                  } catch (err) {}
+                }
 
-    <canvas class="emscripten" id="canvas"
-            oncontextmenu="event.preventDefault()"
-            tabindex="-1"
-            width="1000" height="562">
-    </canvas>
-    <div id="logmsg"></div>
+                function getCssInt(styles, prop) {
+                  return parseInt(styles.getPropertyValue(prop), 10);
+                }
 
-    <script type="text/javascript">
+                function resizeGameCanvas() {
+                  var cc_canv = document.getElementById('canvas');
+                  var dpi = window.devicePixelRatio || 1;
+                  var parent = cc_canv.parentNode;
+                  var styles = window.getComputedStyle(parent, null);
+                  var viewport_w = parent.offsetWidth
+                    - getCssInt(styles, 'padding-left')
+                    - getCssInt(styles, 'padding-right');
 
-      // ── Logging ───────────────────────────────────────────────────
-      function logText(text) {
-        console.log(text);
-        var el = document.getElementById('logmsg');
-        if (el) el.innerHTML = text;
-      }
+                  var canv_w = Math.round(viewport_w);
+                  var screen_h = Math.min(window.innerHeight, window.outerHeight || window.innerHeight);
+                  var canv_h = screen_h;
 
-      // ── IndexedDB check (maps & settings) ─────────────────────────
-      var idb = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
-      if (!idb) {
-        alert('IndexedDB unsupported, therefore\nmaps and settings will not save');
-        window.mozIndexedDB = {};
-      }
+                  if (canv_h % 2) canv_h = canv_h - 1;
+                  if (canv_w % 2) canv_w = canv_w - 1;
 
-      function preloadIndexedDB() { _interop_LoadIndexedDB(); }
+                  cc_canv.width  = canv_w * dpi;
+                  cc_canv.height = canv_h * dpi;
+                }
 
-      // ── Touch layout cleanup ───────────────────────────────────────
-      function forceTouchLayout() {
-        var elem;
-        try {
-          elem = document.getElementById('footer');
-          elem.parentNode.removeChild(elem);
-          elem = document.getElementById('content');
-          elem.parentNode.removeChild(elem);
-        } catch (err) {}
-      }
+                window.addEventListener('resize', resizeGameCanvas);
+                window.addEventListener('orientationchange', function() {
+                  setTimeout(resizeGameCanvas, 200);
+                });
 
-      // ── Canvas resize (original ClassiCube logic) ─────────────────
-      function getCssInt(styles, prop) {
-        return parseInt(styles.getPropertyValue(prop), 10);
-      }
+                function logFatal(event) {
+                  Module.setStatus('ClassiSphere crashed: ' + event + '\\nOpen DevTools > Console for details');
+                  Module.setStatus = function(t) {
+                    if (event) Module.printErr('[post-exception] ' + event);
+                  };
+                }
 
-      function calcViewportWidth(elem) {
-        var parent = elem.parentNode;
-        var styles = window.getComputedStyle(parent, null);
-        return parent.offsetWidth
-          - getCssInt(styles, 'padding-left')
-          - getCssInt(styles, 'padding-right');
-      }
+                document.addEventListener('touchmove', function(e) {
+                  e.preventDefault();
+                }, { passive: false });
 
-      function resizeGameCanvas() {
-        var cc_canv = document.getElementById('canvas');
-        var dpi = window.devicePixelRatio || 1;
-        var aspect_ratio = 16 / 9;
+                var Module = {
+                  preRun:  [ preloadIndexedDB, resizeGameCanvas ],
+                  postRun: [],
+                  arguments: ['Singleplayer'],
+                  print: function(text) {
+                    if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+                    console.log(text);
+                  },
+                  printErr: function(text) {
+                    if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+                    console.error(text);
+                  },
+                  canvas: (function() { return document.getElementById('canvas'); })(),
+                  setStatus: logText,
+                  totalDependencies: 0,
+                  monitorRunDependencies: function(left) {
+                    this.totalDependencies = Math.max(this.totalDependencies, left);
+                    Module.setStatus(left
+                      ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')'
+                      : 'All downloads complete.');
+                  },
+                  onAbort: function(why) { logFatal('abort: ' + why); }
+                };
 
-        var viewport_w = calcViewportWidth(cc_canv);
-        var viewport_h = viewport_w / aspect_ratio;
+                Module.setStatus('Downloading...');
 
-        var canv_w = Math.round(viewport_w);
-        var canv_h = Math.round(viewport_h);
+                window.onerror = function(msg, source, lineno, colno, error) {
+                  source = (source + '').replace('classisphere.js', 'CC.js');
+                  logFatal(msg + ' at ' + lineno + ',' + colno + ' in ' + source);
+                };
+              </script>
 
-        if (canv_h % 2) { canv_h = canv_h - 1; }
-        if (canv_w % 2) { canv_w = canv_w - 1; }
+              <script type="text/javascript" src="classisphere.js"></script>
+            </body>
+          </html>"""
 
-        // Fill full screen height on mobile
-        var screen_h = Math.min(window.innerHeight, window.outerHeight || window.innerHeight);
-        canv_h = screen_h;
-
-        cc_canv.width  = canv_w * dpi;
-        cc_canv.height = canv_h * dpi;
-      }
-
-      // Re-resize on orientation change / window resize
-      window.addEventListener('resize', resizeGameCanvas);
-      window.addEventListener('orientationchange', function() {
-        setTimeout(resizeGameCanvas, 200);
-      });
-
-      // ── Crash handler ─────────────────────────────────────────────
-      function logFatal(event) {
-        Module.setStatus(
-          'ClassiSphere has crashed (' + event + ')\n' +
-          'Open DevTools > Console for details'
-        );
-        Module.setStatus = function(text) {
-          if (event) Module.printErr('[post-exception] ' + event);
-        };
-      }
-
-      // ── iOS bounce scroll prevent ─────────────────────────────────
-      document.addEventListener('touchmove', function(e) {
-        e.preventDefault();
-      }, { passive: false });
-
-      // ── Module (must be defined BEFORE game script loads) ─────────
-      var Module = {
-        preRun:  [ preloadIndexedDB, resizeGameCanvas ],
-        postRun: [],
-
-        // Singleplayer: ['Singleplayer']
-        // Multiplayer:  ['YourName', '', 'server.com', '25565']
-        arguments: ['Singleplayer'],
-
-        print: function(text) {
-          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-          console.log(text);
-        },
-        printErr: function(text) {
-          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-          console.error(text);
-        },
-        canvas: (function() { return document.getElementById('canvas'); })(),
-        setStatus: logText,
-        totalDependencies: 0,
-        monitorRunDependencies: function(left) {
-          this.totalDependencies = Math.max(this.totalDependencies, left);
-          Module.setStatus(
-            left
-              ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')'
-              : 'All downloads complete.'
-          );
-        },
-        onAbort: function(why) { logFatal('abort: ' + why); }
-      };
-
-      Module.setStatus('Downloading...');
-
-      window.onerror = function(msg, source, lineno, colno, error) {
-        source = (source + '').replace('classisphere.js', 'CC.js');
-        logFatal(msg + ' at ' + lineno + ',' + colno + ' in ' + source);
-      };
-
-    </script>
-
-    <!-- NO async — Module must be defined before this runs -->
-    <script type="text/javascript" src="classisphere.js"></script>
-
-  </body>
-</html>
-HTMLEOF
+          with open("deploy/play.html", "w") as f:
+              f.write(html)
+          print("play.html created successfully")
+          PYEOF
 
       - name: Create index.html
         run: |
-          cat <<'EOF' > deploy/index.html
-<!DOCTYPE html>
-<html>
-<head>
-    <meta http-equiv="refresh" content="0; url=play.html">
-    <meta charset="UTF-8">
-    <title>ClassiSphere</title>
-</head>
-<body>
-    <p>Redirecting to <a href="play.html">play.html</a>...</p>
-</body>
-</html>
-EOF
+          python3 - <<'PYEOF'
+          html = """<!DOCTYPE html>
+          <html>
+          <head>
+              <meta http-equiv="refresh" content="0; url=play.html">
+              <meta charset="UTF-8">
+              <title>ClassiSphere</title>
+          </head>
+          <body>
+              <p>Redirecting to <a href="play.html">play.html</a>...</p>
+          </body>
+          </html>"""
+          with open("deploy/index.html", "w") as f:
+              f.write(html)
+          print("index.html created")
+          PYEOF
 
       - name: Create README
         run: |
-          cat <<'EOF' > deploy/README.md
-# ClassiSphere Web Client
+          python3 - <<'PYEOF'
+          md = """# ClassiSphere Web Client
 
-ClassiCube-based web client — works on Android 6+, iOS 12+, desktop.
+          ClassiCube-based web client. Works on Android 6+, iOS 12+, desktop.
 
-## Play
-- [Play Now](play.html)
+          ## Play
+          - [Play Now](play.html)
 
-## Multiplayer
-Edit `arguments` in play.html:
-```javascript
-arguments: ['YourName', '', 'server.address.com', '25565']
-```
+          ## Multiplayer
+          Edit arguments in play.html:
+          ```
+          arguments: ['YourName', '', 'server.address.com', '25565']
+          ```
 
-## Local Testing
-```
-python -m http.server 8000
-# Open http://localhost:8000/play.html
-```
-EOF
+          ## Local Testing
+          ```
+          python -m http.server 8000
+          ```
+          Open http://localhost:8000/play.html
+          """
+          with open("deploy/README.md", "w") as f:
+              f.write(md)
+          print("README.md created")
+          PYEOF
 
       - name: Verify deployment files
         run: |
-          echo "===== Deployment Files ====="
+          echo "===== Deploy Files ====="
           ls -la deploy/
-          echo ""
-          echo "File Sizes:"
           du -sh deploy/*
-          echo ""
-          echo "Texture Pack:"
           ls -la deploy/texpacks/
-          echo ""
-          echo "Game JS:"
           ls -lh deploy/classisphere.js
 
       - name: Deploy to web branch
