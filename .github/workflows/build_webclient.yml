@@ -23,7 +23,8 @@ jobs:
 
       - name: Compile webclient
         run: |
-          emcc src/*.c src/webclient/*.c -o ClassiCube.js \
+          # Compile web client WITHOUT android_main export
+          emcc src/*.c src/webclient/*.c -o classisphere.js \
             -s WASM=0 \
             -s NO_EXIT_RUNTIME=1 \
             -s LEGACY_VM_SUPPORT=1 \
@@ -35,31 +36,40 @@ jobs:
             -s SAFE_HEAP=0 \
             -s ASSERTIONS=1 \
             -s ALIASING_FUNCTION_POINTERS=1 \
-            -s DISABLE_EXCEPTION_CATCHING=0 \
+            -s DISABLE_EXCEPTION_CATCHING=1 \
             --js-library src/webclient/interop_web.js \
             -Os \
             -g2 \
             -s SINGLE_FILE \
             -Wno-implicit-function-declaration \
-            -s EXPORTED_FUNCTIONS='["_main", "_android_main"]' \
-            -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]'
+            -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
+            -s EXPORTED_FUNCTIONS='["_main"]' \
+            -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]'
           
           # Fix texture pack URL (point to our hosted default.zip)
-          sed -i 's|/static/default.zip|texpacks/default.zip|g' ClassiCube.js
+          sed -i 's|/static/default.zip|texpacks/default.zip|g' classisphere.js
           
           # Fix passive event listeners
-          sed -i 's#eventHandler.useCapture);#{ useCapture: eventHandler.useCapture, passive: false });#g' ClassiCube.js
+          sed -i 's#eventHandler.useCapture);#{ useCapture: eventHandler.useCapture, passive: false });#g' classisphere.js
           
-          # Rename to match official docs (classisphere.js)
-          cp ClassiCube.js classisphere.js
+          # Also create a backup with original name
+          cp classisphere.js ClassiCube.js
+          
+          echo "Build completed successfully!"
+          ls -lh classisphere.js
           
       - name: Download assets
         run: |
           # Download default texture pack
-          wget https://www.classicube.net/static/default.zip
+          echo "Downloading texture pack..."
+          wget -q https://www.classicube.net/static/default.zip
           
           # Download audio pack (optional but recommended)
-          wget https://www.classicube.net/static/audio.zip
+          echo "Downloading audio pack..."
+          wget -q https://www.classicube.net/static/audio.zip
+          
+          echo "Assets downloaded:"
+          ls -lh *.zip
           
       - name: Create deployment structure
         run: |
@@ -69,11 +79,14 @@ jobs:
           
           # Copy game files
           cp classisphere.js deploy/
-          cp ClassiCube.js deploy/  # Keep both names for compatibility
+          cp ClassiCube.js deploy/  # Keep both for compatibility
           
           # Copy assets
           cp default.zip deploy/texpacks/
           cp audio.zip deploy/audio/
+          
+          echo "Deployment structure created:"
+          ls -la deploy/
           
       - name: Create play.html (Official Template)
         run: |
@@ -115,18 +128,19 @@ jobs:
                       bottom: 10px;
                       left: 10px;
                       right: 10px;
-                      color: #fff;
-                      background: rgba(0,0,0,0.7);
-                      font-family: monospace;
+                      color: #0f0;
+                      background: rgba(0,0,0,0.8);
+                      font-family: 'Courier New', monospace;
                       font-size: 12px;
-                      padding: 5px 10px;
+                      padding: 8px 12px;
                       border-radius: 5px;
                       z-index: 1000;
                       pointer-events: none;
                       text-align: center;
+                      border: 1px solid #0f0;
                   }
                   @media (max-width: 768px) {
-                      #logmsg { font-size: 10px; bottom: 5px; }
+                      #logmsg { font-size: 10px; bottom: 5px; padding: 5px 8px; }
                   }
               </style>
           </head>
@@ -137,15 +151,15 @@ jobs:
                       oncontextmenu="event.preventDefault()" 
                       tabindex="-1">
               </canvas>
-              <span id="logmsg"></span>
+              <div id="logmsg">Loading ClassiCube...</div>
               
               <script type='text/javascript'>
                   // Module object as per official documentation
                   var Module = {
                       preRun: [],
                       postRun: [],
-                      // For singleplayer, use: arguments: [ "PlayerName" ]
-                      // For multiplayer, use: arguments: [ "PlayerName", "", "server.com", "25565" ]
+                      // For singleplayer: arguments: [ "PlayerName" ]
+                      // For multiplayer: arguments: [ "PlayerName", "", "server.com", "25565" ]
                       arguments: [ "Guest" ],  // Start in singleplayer
                       print: function(text) {
                           if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
@@ -161,6 +175,14 @@ jobs:
                           var logMsg = document.getElementById('logmsg');
                           if (logMsg) {
                               logMsg.innerHTML = text || 'Ready';
+                              // Change color based on status
+                              if (text && text.indexOf('Error') !== -1) {
+                                  logMsg.style.color = '#f00';
+                                  logMsg.style.borderColor = '#f00';
+                              } else if (text && text.indexOf('Complete') !== -1) {
+                                  logMsg.style.color = '#0f0';
+                                  logMsg.style.borderColor = '#0f0';
+                              }
                           }
                       },
                       totalDependencies: 0,
@@ -171,7 +193,7 @@ jobs:
                   };
                   
                   // Initial status
-                  Module.setStatus('Downloading game...');
+                  Module.setStatus('Initializing...');
                   
                   // Error handler
                   window.onerror = function(msg, url, line, col, error) {
@@ -184,8 +206,10 @@ jobs:
                   document.addEventListener('visibilitychange', function() {
                       if (document.hidden) {
                           console.log('Tab hidden - game may pause');
+                          Module.setStatus('Tab hidden');
                       } else {
                           console.log('Tab visible - game resumed');
+                          Module.setStatus('Game resumed');
                       }
                   });
                   
@@ -194,6 +218,12 @@ jobs:
                       console.log('Touch device detected - using touch controls');
                       Module.setStatus('Touch controls enabled');
                   }
+                  
+                  // Log when page is ready
+                  window.addEventListener('load', function() {
+                      console.log('Page fully loaded');
+                      Module.setStatus('Ready to play!');
+                  });
               </script>
               <script async type="text/javascript" src="classisphere.js"></script>
           </body>
@@ -249,14 +279,19 @@ jobs:
           
       - name: Verify deployment files
         run: |
-          echo "=== Deployment Files ==="
+          echo "========================================="
+          echo "Deployment Files"
+          echo "========================================="
           ls -la deploy/
           echo ""
-          echo "=== File Sizes ==="
+          echo "File Sizes:"
           du -sh deploy/*
           echo ""
-          echo "=== Texture Pack ==="
+          echo "Texture Pack:"
           ls -la deploy/texpacks/
+          echo ""
+          echo "Game JS size:"
+          ls -lh deploy/classisphere.js
           
       - name: Deploy to web branch
         uses: peaceiris/actions-gh-pages@v4
