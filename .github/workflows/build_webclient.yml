@@ -44,214 +44,219 @@ jobs:
             -s EXPORTED_FUNCTIONS='["_main", "_android_main"]' \
             -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]'
           
+          # Fix texture pack URL (point to our hosted default.zip)
+          sed -i 's|/static/default.zip|texpacks/default.zip|g' ClassiCube.js
+          
+          # Fix passive event listeners
           sed -i 's#eventHandler.useCapture);#{ useCapture: eventHandler.useCapture, passive: false });#g' ClassiCube.js
           
-      - name: Create HTML wrapper with Module support
+          # Rename to match official docs (classisphere.js)
+          cp ClassiCube.js classisphere.js
+          
+      - name: Download assets
         run: |
-          cat <<'EOF' > index.html
+          # Download default texture pack
+          wget https://www.classicube.net/static/default.zip
+          
+          # Download audio pack (optional but recommended)
+          wget https://www.classicube.net/static/audio.zip
+          
+      - name: Create deployment structure
+        run: |
+          # Create deployment directory
+          mkdir -p deploy/texpacks
+          mkdir -p deploy/audio
+          
+          # Copy game files
+          cp classisphere.js deploy/
+          cp ClassiCube.js deploy/  # Keep both names for compatibility
+          
+          # Copy assets
+          cp default.zip deploy/texpacks/
+          cp audio.zip deploy/audio/
+          
+      - name: Create play.html (Official Template)
+        run: |
+          cat <<'EOF' > deploy/play.html
           <!DOCTYPE html>
           <html lang="en">
           <head>
               <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, shrink-to-fit=no">
+              <meta name="apple-mobile-web-app-capable" content="yes">
+              <meta name="mobile-web-app-capable" content="yes">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, shrink-to-fit=no">
               <title>ClassiCube - Minecraft Classic</title>
               <style>
                   * {
                       margin: 0;
                       padding: 0;
                       box-sizing: border-box;
-                      user-select: none;
-                      -webkit-tap-highlight-color: transparent;
                   }
                   body {
                       background: #000;
                       overflow: hidden;
                       touch-action: none;
-                      position: fixed;
-                      width: 100%;
-                      height: 100%;
                   }
+                  /* Canvas must not have any border or padding, or mouse coords will be wrong */
                   canvas {
                       display: block;
                       width: 100%;
                       height: 100%;
+                      border: 0;
+                      padding: 0;
+                      background-color: black;
                       cursor: grab;
-                      touch-action: none;
-                      outline: none;
                   }
                   canvas:active {
                       cursor: grabbing;
                   }
-                  #loading {
+                  #logmsg {
                       position: fixed;
-                      top: 50%;
-                      left: 50%;
-                      transform: translate(-50%, -50%);
+                      bottom: 10px;
+                      left: 10px;
+                      right: 10px;
                       color: #fff;
-                      font-family: 'Courier New', monospace;
-                      background: rgba(0,0,0,0.9);
-                      padding: 20px 30px;
-                      border-radius: 10px;
-                      z-index: 1000;
-                      text-align: center;
-                      border: 1px solid #444;
-                      box-shadow: 0 0 20px rgba(0,0,0,0.5);
-                  }
-                  #loading-status {
-                      margin-top: 10px;
-                      font-size: 12px;
-                      color: #aaa;
-                  }
-                  #error {
-                      position: fixed;
-                      bottom: 20px;
-                      left: 20px;
-                      right: 20px;
-                      color: #f00;
-                      background: rgba(0,0,0,0.8);
-                      padding: 10px;
+                      background: rgba(0,0,0,0.7);
                       font-family: monospace;
                       font-size: 12px;
-                      display: none;
-                      z-index: 2000;
+                      padding: 5px 10px;
                       border-radius: 5px;
+                      z-index: 1000;
+                      pointer-events: none;
+                      text-align: center;
                   }
                   @media (max-width: 768px) {
-                      #loading { font-size: 14px; padding: 15px 20px; }
-                      #loading-status { font-size: 10px; }
+                      #logmsg { font-size: 10px; bottom: 5px; }
                   }
               </style>
           </head>
           <body>
-              <div id="loading">
-                  <div>🎮 ClassiCube</div>
-                  <div id="loading-status">Loading game...</div>
-              </div>
-              <div id="error"></div>
+              <!-- Canvas must be defined in HTML, not created dynamically -->
+              <canvas id="canvas" 
+                      style="display:block; border:0; padding:0; background-color: black;" 
+                      oncontextmenu="event.preventDefault()" 
+                      tabindex="-1">
+              </canvas>
+              <span id="logmsg"></span>
               
-              <script>
-                  // Error handler
-                  window.onerror = function(msg, url, line, col, error) {
-                      var errorDiv = document.getElementById('error');
-                      errorDiv.innerHTML = 'Error: ' + msg + '<br>Line: ' + line;
-                      errorDiv.style.display = 'block';
-                      console.error('Game error:', msg, url, line, error);
-                      return false;
-                  };
-                  
-                  // Module object with required functions
+              <script type='text/javascript'>
+                  // Module object as per official documentation
                   var Module = {
-                      canvas: null,
-                      setStatus: function(text) {
-                          var statusDiv = document.getElementById('loading-status');
-                          if (statusDiv) {
-                              statusDiv.innerHTML = text || 'Ready...';
-                          }
-                          console.log('Status:', text);
-                          
-                          // Hide loading when game is ready
-                          if (text && text.indexOf('Running') !== -1) {
-                              setTimeout(function() {
-                                  var loading = document.getElementById('loading');
-                                  if (loading) {
-                                      loading.style.opacity = '0';
-                                      setTimeout(function() {
-                                          if (loading) loading.style.display = 'none';
-                                      }, 500);
-                                  }
-                              }, 500);
-                          }
-                      },
+                      preRun: [],
+                      postRun: [],
+                      // For singleplayer, use: arguments: [ "PlayerName" ]
+                      // For multiplayer, use: arguments: [ "PlayerName", "", "server.com", "25565" ]
+                      arguments: [ "Guest" ],  // Start in singleplayer
                       print: function(text) {
+                          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
                           console.log('[ClassiCube]', text);
                       },
                       printErr: function(text) {
+                          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
                           console.error('[ClassiCube]', text);
                       },
-                      preRun: [],
-                      postRun: [],
-                      onAbort: function(what) {
-                          console.error('Abort:', what);
-                          var errorDiv = document.getElementById('error');
-                          errorDiv.innerHTML = 'Game crashed: ' + what;
-                          errorDiv.style.display = 'block';
+                      canvas: (function() { return document.getElementById('canvas'); })(),
+                      setStatus: function(text) {
+                          console.log('[Status]', text);
+                          var logMsg = document.getElementById('logmsg');
+                          if (logMsg) {
+                              logMsg.innerHTML = text || 'Ready';
+                          }
+                      },
+                      totalDependencies: 0,
+                      monitorRunDependencies: function(left) {
+                          this.totalDependencies = Math.max(this.totalDependencies, left);
+                          Module.setStatus(left ? 'Loading... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : 'All downloads complete. Starting game...');
                       }
                   };
                   
-                  // Create canvas when page loads
-                  window.addEventListener('load', function() {
-                      console.log('Page loaded, creating canvas...');
-                      
-                      // Create canvas element
-                      var canvas = document.createElement('canvas');
-                      canvas.id = 'canvas';
-                      canvas.width = window.innerWidth;
-                      canvas.height = window.innerHeight;
-                      document.body.appendChild(canvas);
-                      Module.canvas = canvas;
-                      
-                      // Handle resize
-                      window.addEventListener('resize', function() {
-                          if (Module.canvas) {
-                              Module.canvas.width = window.innerWidth;
-                              Module.canvas.height = window.innerHeight;
-                          }
-                      });
-                      
-                      Module.setStatus('Starting game...');
+                  // Initial status
+                  Module.setStatus('Downloading game...');
+                  
+                  // Error handler
+                  window.onerror = function(msg, url, line, col, error) {
+                      Module.setStatus('Error: ' + msg);
+                      Module.printErr('Error: ' + msg + ' at ' + url + ':' + line);
+                      return false;
+                  };
+                  
+                  // Handle visibility change (pause when tab inactive)
+                  document.addEventListener('visibilitychange', function() {
+                      if (document.hidden) {
+                          console.log('Tab hidden - game may pause');
+                      } else {
+                          console.log('Tab visible - game resumed');
+                      }
                   });
+                  
+                  // Touch device detection for better logging
+                  if ('ontouchstart' in window) {
+                      console.log('Touch device detected - using touch controls');
+                      Module.setStatus('Touch controls enabled');
+                  }
               </script>
-              <script src="ClassiCube.js"></script>
+              <script async type="text/javascript" src="classisphere.js"></script>
           </body>
           </html>
           EOF
           
-      - name: Prepare deployment
+      - name: Create index.html (redirect to play.html)
         run: |
-          mkdir -p deploy
-          cp ClassiCube.js deploy/
-          cp index.html deploy/
-          
-          # Create a simple test page
-          cat <<'EOF' > deploy/test.html
+          cat <<'EOF' > deploy/index.html
           <!DOCTYPE html>
           <html>
-          <head><title>ClassiCube Test</title></head>
-          <body style="background:#000;color:#fff;font-family:monospace;padding:20px">
-              <h1>ClassiCube Web Client</h1>
-              <p>If you see this, the server is working.</p>
-              <p>Game should be at <a href="index.html" style="color:#0f0">index.html</a></p>
-              <hr>
-              <p>Status: <span id="status" style="color:#0f0">Ready</span></p>
-              <button onclick="location.href='index.html'" style="padding:10px;margin-top:20px">Launch Game</button>
+          <head>
+              <meta http-equiv="refresh" content="0; url=play.html">
+              <title>ClassiCube</title>
+          </head>
+          <body>
+              <p>Redirecting to <a href="play.html">play.html</a>...</p>
           </body>
           </html>
           EOF
           
+      - name: Create README
+        run: |
           cat <<'EOF' > deploy/README.md
           # ClassiCube Web Client
           
-          ## Play Minecraft Classic in your browser!
+          Official ClassiCube web client hosted on GitHub Pages.
           
-          ### How to Play:
-          1. Open [index.html](index.html)
-          2. Wait for the game to load
-          3. Use WASD or arrow keys to move
-          4. Mouse to look around
-          5. Touch controls on mobile devices
+          ## Play
+          - [Play Singleplayer](play.html)
           
-          ### Features:
+          ## Features
           - Full Minecraft Classic gameplay
-          - Multiplayer support
           - Works on desktop and mobile
-          - Touch screen controls
+          - Touch controls on mobile devices
+          - Multiplayer support (edit play.html to add server)
           
-          ### If the game doesn't load:
-          - Refresh the page
-          - Check browser console (F12) for errors
-          - Try a different browser (Chrome, Firefox, Edge)
-          - Make sure JavaScript is enabled
+          ## For Multiplayer
+          Edit the `arguments` array in play.html:
+          ```javascript
+          arguments: [ "YourName", "", "server.address.com", "25565" ]
+          ```
+          
+          ## Local Development
+          1. Download the files
+          2. Run a local server: `python -m http.server 8000`
+          3. Open http://localhost:8000/play.html
+          
+          ## Credits
+          - [ClassiCube Project](https://www.classicube.net/)
+          - Original Minecraft Classic by Mojang
           EOF
+          
+      - name: Verify deployment files
+        run: |
+          echo "=== Deployment Files ==="
+          ls -la deploy/
+          echo ""
+          echo "=== File Sizes ==="
+          du -sh deploy/*
+          echo ""
+          echo "=== Texture Pack ==="
+          ls -la deploy/texpacks/
           
       - name: Deploy to web branch
         uses: peaceiris/actions-gh-pages@v4
@@ -262,7 +267,7 @@ jobs:
           force_orphan: true
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Deploy web client with fixed Module.setStatus - ${{ github.sha }}'
+          commit_message: 'Deploy official ClassiCube web client - ${{ github.sha }}'
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
