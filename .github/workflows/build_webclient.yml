@@ -23,7 +23,7 @@ jobs:
 
       - name: Compile webclient
         run: |
-          # Compile web client - asm.js mode for max old device support
+          # WASM=0 = asm.js — max compatibility (Android 6, iOS 12)
           emcc src/*.c src/webclient/*.c -o classisphere.js \
             -s WASM=0 \
             -s NO_EXIT_RUNTIME=1 \
@@ -41,7 +41,7 @@ jobs:
             -s SINGLE_FILE \
             -Wno-implicit-function-declaration \
             -s ERROR_ON_UNDEFINED_SYMBOLS=0 \
-            -s EXPORTED_FUNCTIONS='["_main"]' \
+            -s EXPORTED_FUNCTIONS='["_main","_interop_LoadIndexedDB"]' \
             -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]'
 
           # Fix texture pack URL
@@ -54,10 +54,9 @@ jobs:
             echo "WARNING: Texture URL sed replacement may have failed!"
           fi
 
-          # Fix passive event listeners (fixes scroll warning on Android Chrome)
+          # Fix passive event listeners (Android Chrome scroll warning fix)
           sed -i 's#eventHandler.useCapture);#{ useCapture: eventHandler.useCapture, passive: false });#g' classisphere.js
 
-          # Backup copy
           cp classisphere.js ClassiCube.js
 
           echo "Build completed!"
@@ -67,14 +66,14 @@ jobs:
         run: |
           echo "Downloading texture pack..."
           wget -q https://www.classicube.net/static/default.zip || {
-            echo "ERROR: Failed to download default.zip — build cannot continue"
+            echo "ERROR: Failed to download default.zip"
             exit 1
           }
 
           echo "Downloading audio pack (optional)..."
-          wget -q https://www.classicube.net/static/audio.zip || echo "Audio pack download failed — skipping (non-critical)"
+          wget -q https://www.classicube.net/static/audio.zip || echo "Audio pack skipped (non-critical)"
 
-          echo "Assets downloaded:"
+          echo "Assets:"
           ls -lh *.zip 2>/dev/null || echo "No zip files found"
 
       - name: Create deployment structure
@@ -84,245 +83,255 @@ jobs:
 
           cp classisphere.js deploy/
           cp ClassiCube.js deploy/
-
           cp default.zip deploy/texpacks/
-          [ -f audio.zip ] && cp audio.zip deploy/audio/ || echo "Skipping audio.zip (not downloaded)"
+          [ -f audio.zip ] && cp audio.zip deploy/audio/ || echo "Skipping audio.zip"
 
-          echo "Deployment structure:"
+          echo "Deploy structure:"
           ls -la deploy/
 
       - name: Create play.html
         run: |
           cat <<'HTMLEOF' > deploy/play.html
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-              <meta name="apple-mobile-web-app-capable" content="yes">
-              <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-              <meta name="mobile-web-app-capable" content="yes">
-              <title>ClassiSphere - Play</title>
-              <style>
-                  * {
-                      margin: 0;
-                      padding: 0;
-                      box-sizing: border-box;
-                  }
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
+    <meta name="theme-color" content="#715580" />
+    <title>ClassiSphere - Play</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
 
-                  html, body {
-                      width: 100%;
-                      height: 100%;
-                      background: #000;
-                      overflow: hidden;
-                      touch-action: none;
-                      -webkit-user-select: none;
-                      user-select: none;
-                  }
+      html, body {
+        width: 100%;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
 
-                  /* Canvas fullscreen — vw/vh for reliable mobile sizing */
-                  canvas {
-                      display: block;
-                      width: 100vw;
-                      height: 100vh;
-                      border: 0;
-                      padding: 0;
-                      background: #000;
-                      cursor: grab;
-                      /* iOS safe area padding handled via env() */
-                      padding-top: env(safe-area-inset-top);
-                      padding-bottom: env(safe-area-inset-bottom);
-                      padding-left: env(safe-area-inset-left);
-                      padding-right: env(safe-area-inset-right);
-                  }
+      /* Original ClassiCube rule — border/padding must be 0 or mouse coords break */
+      #canvas {
+        display: block;
+        border-width: 0px !important;
+        padding: 0 !important;
+        margin: 0 auto;
+        background-color: #715580;
+        width: 100vw;
+        height: 100vh;
+      }
 
-                  canvas:active {
-                      cursor: grabbing;
-                  }
+      #logmsg {
+        font-size: 18px;
+        font-family: 'Source Sans Pro', Arial, sans-serif;
+        text-shadow: 1px 1px 5px rgba(0,0,0,.5);
+        font-weight: bold;
+        text-align: center;
+        white-space: pre-wrap;
+        color: #FAFAFA;
+        width: 100%;
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 1000;
+        pointer-events: none;
+        padding: 8px;
+        background: rgba(0,0,0,0.5);
+      }
 
-                  #logmsg {
-                      position: fixed;
-                      bottom: max(10px, env(safe-area-inset-bottom));
-                      left: 10px;
-                      right: 10px;
-                      color: #0f0;
-                      background: rgba(0, 0, 0, 0.85);
-                      font-family: 'Courier New', Courier, monospace;
-                      font-size: 12px;
-                      padding: 8px 12px;
-                      border-radius: 5px;
-                      z-index: 1000;
-                      pointer-events: none;
-                      text-align: center;
-                      border: 1px solid #0f0;
-                      transition: opacity 0.5s;
-                  }
+      @media (max-width: 480px) {
+        #logmsg { font-size: 13px; }
+      }
+    </style>
+  </head>
+  <body>
 
-                  @media (max-width: 480px) {
-                      #logmsg {
-                          font-size: 10px;
-                          padding: 5px 8px;
-                      }
-                  }
-              </style>
-          </head>
-          <body>
+    <canvas class="emscripten" id="canvas"
+            oncontextmenu="event.preventDefault()"
+            tabindex="-1"
+            width="1000" height="562">
+    </canvas>
+    <div id="logmsg"></div>
 
-              <canvas id="canvas"
-                      oncontextmenu="event.preventDefault()"
-                      tabindex="-1">
-              </canvas>
+    <script type="text/javascript">
 
-              <div id="logmsg">Loading ClassiSphere...</div>
+      // ── Logging ───────────────────────────────────────────────────
+      function logText(text) {
+        console.log(text);
+        var el = document.getElementById('logmsg');
+        if (el) el.innerHTML = text;
+      }
 
-              <script type="text/javascript">
-                  // Module must be defined BEFORE the game script loads
-                  var Module = {
-                      preRun: [],
-                      postRun: [],
+      // ── IndexedDB check (maps & settings) ─────────────────────────
+      var idb = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
+      if (!idb) {
+        alert('IndexedDB unsupported, therefore\nmaps and settings will not save');
+        window.mozIndexedDB = {};
+      }
 
-                      // Singleplayer: ["PlayerName"]
-                      // Multiplayer:  ["PlayerName", "", "server.com", "25565"]
-                      arguments: ["Guest"],
+      function preloadIndexedDB() { _interop_LoadIndexedDB(); }
 
-                      print: function(text) {
-                          if (arguments.length > 1) {
-                              text = Array.prototype.slice.call(arguments).join(' ');
-                          }
-                          console.log('[ClassiSphere]', text);
-                      },
+      // ── Touch layout cleanup ───────────────────────────────────────
+      function forceTouchLayout() {
+        var elem;
+        try {
+          elem = document.getElementById('footer');
+          elem.parentNode.removeChild(elem);
+          elem = document.getElementById('content');
+          elem.parentNode.removeChild(elem);
+        } catch (err) {}
+      }
 
-                      printErr: function(text) {
-                          if (arguments.length > 1) {
-                              text = Array.prototype.slice.call(arguments).join(' ');
-                          }
-                          console.error('[ClassiSphere Error]', text);
-                      },
+      // ── Canvas resize (original ClassiCube logic) ─────────────────
+      function getCssInt(styles, prop) {
+        return parseInt(styles.getPropertyValue(prop), 10);
+      }
 
-                      canvas: (function() {
-                          return document.getElementById('canvas');
-                      })(),
+      function calcViewportWidth(elem) {
+        var parent = elem.parentNode;
+        var styles = window.getComputedStyle(parent, null);
+        return parent.offsetWidth
+          - getCssInt(styles, 'padding-left')
+          - getCssInt(styles, 'padding-right');
+      }
 
-                      setStatus: function(text) {
-                          console.log('[Status]', text);
-                          var el = document.getElementById('logmsg');
-                          if (!el) return;
+      function resizeGameCanvas() {
+        var cc_canv = document.getElementById('canvas');
+        var dpi = window.devicePixelRatio || 1;
+        var aspect_ratio = 16 / 9;
 
-                          el.innerHTML = text || 'Ready';
+        var viewport_w = calcViewportWidth(cc_canv);
+        var viewport_h = viewport_w / aspect_ratio;
 
-                          if (text && text.indexOf('Error') !== -1) {
-                              el.style.color = '#f44';
-                              el.style.borderColor = '#f44';
-                          } else if (!text || text === 'Ready to play!') {
-                              // Fade out log when game is ready
-                              el.style.opacity = '0';
-                          } else {
-                              el.style.color = '#0f0';
-                              el.style.borderColor = '#0f0';
-                              el.style.opacity = '1';
-                          }
-                      },
+        var canv_w = Math.round(viewport_w);
+        var canv_h = Math.round(viewport_h);
 
-                      totalDependencies: 0,
+        if (canv_h % 2) { canv_h = canv_h - 1; }
+        if (canv_w % 2) { canv_w = canv_w - 1; }
 
-                      monitorRunDependencies: function(left) {
-                          this.totalDependencies = Math.max(this.totalDependencies, left);
-                          if (left) {
-                              Module.setStatus(
-                                  'Loading... (' +
-                                  (this.totalDependencies - left) + '/' +
-                                  this.totalDependencies + ')'
-                              );
-                          } else {
-                              Module.setStatus('All downloads complete. Starting game...');
-                          }
-                      }
-                  };
+        // Fill full screen height on mobile
+        var screen_h = Math.min(window.innerHeight, window.outerHeight || window.innerHeight);
+        canv_h = screen_h;
 
-                  Module.setStatus('Initializing...');
+        cc_canv.width  = canv_w * dpi;
+        cc_canv.height = canv_h * dpi;
+      }
 
-                  // Global error handler
-                  window.onerror = function(msg, url, line, col, error) {
-                      Module.setStatus('Error: ' + msg);
-                      return false;
-                  };
+      // Re-resize on orientation change / window resize
+      window.addEventListener('resize', resizeGameCanvas);
+      window.addEventListener('orientationchange', function() {
+        setTimeout(resizeGameCanvas, 200);
+      });
 
-                  // Tab visibility
-                  document.addEventListener('visibilitychange', function() {
-                      if (document.hidden) {
-                          console.log('Tab hidden');
-                      } else {
-                          console.log('Tab visible');
-                      }
-                  });
+      // ── Crash handler ─────────────────────────────────────────────
+      function logFatal(event) {
+        Module.setStatus(
+          'ClassiSphere has crashed (' + event + ')\n' +
+          'Open DevTools > Console for details'
+        );
+        Module.setStatus = function(text) {
+          if (event) Module.printErr('[post-exception] ' + event);
+        };
+      }
 
-                  // iOS Safari: prevent bounce scroll
-                  document.addEventListener('touchmove', function(e) {
-                      e.preventDefault();
-                  }, { passive: false });
+      // ── iOS bounce scroll prevent ─────────────────────────────────
+      document.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+      }, { passive: false });
 
-                  window.addEventListener('load', function() {
-                      Module.setStatus('Ready to play!');
-                  });
-              </script>
+      // ── Module (must be defined BEFORE game script loads) ─────────
+      var Module = {
+        preRun:  [ preloadIndexedDB, resizeGameCanvas ],
+        postRun: [],
 
-              <!-- NO async here — Module object must be ready before script runs -->
-              <script type="text/javascript" src="classisphere.js"></script>
+        // Singleplayer: ['Singleplayer']
+        // Multiplayer:  ['YourName', '', 'server.com', '25565']
+        arguments: ['Singleplayer'],
 
-          </body>
-          </html>
-          HTMLEOF
+        print: function(text) {
+          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+          console.log(text);
+        },
+        printErr: function(text) {
+          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+          console.error(text);
+        },
+        canvas: (function() { return document.getElementById('canvas'); })(),
+        setStatus: logText,
+        totalDependencies: 0,
+        monitorRunDependencies: function(left) {
+          this.totalDependencies = Math.max(this.totalDependencies, left);
+          Module.setStatus(
+            left
+              ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')'
+              : 'All downloads complete.'
+          );
+        },
+        onAbort: function(why) { logFatal('abort: ' + why); }
+      };
+
+      Module.setStatus('Downloading...');
+
+      window.onerror = function(msg, source, lineno, colno, error) {
+        source = (source + '').replace('classisphere.js', 'CC.js');
+        logFatal(msg + ' at ' + lineno + ',' + colno + ' in ' + source);
+      };
+
+    </script>
+
+    <!-- NO async — Module must be defined before this runs -->
+    <script type="text/javascript" src="classisphere.js"></script>
+
+  </body>
+</html>
+HTMLEOF
 
       - name: Create index.html
         run: |
           cat <<'EOF' > deploy/index.html
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <meta http-equiv="refresh" content="0; url=play.html">
-              <meta charset="UTF-8">
-              <title>ClassiSphere</title>
-          </head>
-          <body>
-              <p>Redirecting to <a href="play.html">play.html</a>...</p>
-          </body>
-          </html>
-          EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="refresh" content="0; url=play.html">
+    <meta charset="UTF-8">
+    <title>ClassiSphere</title>
+</head>
+<body>
+    <p>Redirecting to <a href="play.html">play.html</a>...</p>
+</body>
+</html>
+EOF
 
       - name: Create README
         run: |
           cat <<'EOF' > deploy/README.md
-          # ClassiSphere Web Client
+# ClassiSphere Web Client
 
-          ClassiCube-based web client hosted on GitHub Pages.
+ClassiCube-based web client — works on Android 6+, iOS 12+, desktop.
 
-          ## Play
-          - [Play Now](play.html)
+## Play
+- [Play Now](play.html)
 
-          ## Features
-          - Works on desktop and mobile (Android 6+, iOS 12+)
-          - Touch controls on mobile
-          - asm.js mode for maximum old device compatibility
-          - Multiplayer support
+## Multiplayer
+Edit `arguments` in play.html:
+```javascript
+arguments: ['YourName', '', 'server.address.com', '25565']
+```
 
-          ## Multiplayer Setup
-          Edit `arguments` in play.html:
-          ```javascript
-          arguments: ["YourName", "", "server.address.com", "25565"]
-          ```
-
-          ## Local Testing
-          ```
-          python -m http.server 8000
-          # Open http://localhost:8000/play.html
-          ```
-          EOF
+## Local Testing
+```
+python -m http.server 8000
+# Open http://localhost:8000/play.html
+```
+EOF
 
       - name: Verify deployment files
         run: |
-          echo "========================================="
-          echo "Deployment Files"
-          echo "========================================="
+          echo "===== Deployment Files ====="
           ls -la deploy/
           echo ""
           echo "File Sizes:"
@@ -343,7 +352,7 @@ jobs:
           force_orphan: true
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Deploy ClassiSphere web client - ${{ github.sha }}'
+          commit_message: 'Deploy ClassiSphere - ${{ github.sha }}'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
