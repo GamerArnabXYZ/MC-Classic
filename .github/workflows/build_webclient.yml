@@ -59,6 +59,7 @@ jobs:
           wget -q https://www.classicube.net/static/audio.zip || echo "Audio skipped"
           ls -lh *.zip 2>/dev/null
 
+
       - name: Create deployment structure
         run: |
           mkdir -p deploy/texpacks deploy/audio
