@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: emscripten/emsdk:3.1.50
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -59,7 +58,6 @@ jobs:
           wget -q https://www.classicube.net/static/audio.zip || echo "Audio skipped"
           ls -lh *.zip 2>/dev/null
 
-
       - name: Create deployment structure
         run: |
           mkdir -p deploy/texpacks deploy/audio
@@ -69,9 +67,9 @@ jobs:
           [ -f audio.zip ] && cp audio.zip deploy/audio/ || echo "No audio.zip"
           ls -la deploy/
 
-     - name: Add timestamp file to force commit
-  run: |
-    date -u --iso-8601=seconds | sed 's/+00:00/Z/' > deploy/update.txt
+      - name: Add timestamp file to force commit
+        run: |
+          date -u --iso-8601=seconds | sed 's/+00:00/Z/' > deploy/update.txt
 
       - name: Deploy to web branch
         uses: peaceiris/actions-gh-pages@v4
@@ -79,8 +77,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: web
           publish_dir: ./deploy
-          force_orphan: false      # <- change
-          keep_files: true         # <- new
+          force_orphan: false
+          keep_files: true
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
           commit_message: 'Deploy ClassiSphere - ${{ github.sha }}'
