@@ -71,7 +71,7 @@ jobs:
 
       - name: Add timestamp file to force commit
   run: |
-    echo "last_update=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > deploy/update.txt
+    python3 -c "import datetime; print('last_update=' + datetime.datetime.utcnow().isoformat() + 'Z')" > deploy/update.txt
 
       - name: Deploy to web branch
         uses: peaceiris/actions-gh-pages@v4
