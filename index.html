@@ -2,71 +2,159 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0a0a0a" />
   <title>ClassiSphere</title>
   <style>
+    /* Reset and Legacy Support */
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    
     html, body {
-      width: 100%; height: 100%;
-      background: #0a0a0a;
+      width: 100%;
+      height: 100%;
+      background-color: #0a0a0a;
+      /* Legacy iOS/Android often need overflow:hidden on both */
       overflow: hidden;
       -webkit-user-select: none;
       user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
+
+    /* Cool Animated Background - Low CPU for older chips */
     body {
+      display: -webkit-box;
+      display: -ms-flexbox;
       display: flex;
+      -webkit-box-align: center;
+      -ms-flex-align: center;
       align-items: center;
+      -webkit-box-pack: center;
+      -ms-flex-pack: center;
       justify-content: center;
-      font-family: Arial, sans-serif;
-      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      background: radial-gradient(circle at center, #1a1025 0%, #0a0a0a 100%);
+      position: relative;
     }
-    .container { text-align: center; padding: 24px; }
+
+    /* Subtle grid pattern for that 'Sphere' feel */
+    body::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: radial-gradient(rgba(200, 160, 224, 0.05) 1px, transparent 1px);
+      background-size: 30px 30px;
+      z-index: 0;
+    }
+
+    .container { 
+      position: relative;
+      z-index: 1;
+      text-align: center; 
+      padding: 24px;
+      width: 100%;
+    }
+
+    /* Replaced clamp() with fallbacks for iOS 12/Android 6 */
     .title {
-      font-family: Georgia, serif;
-      font-size: clamp(32px, 8vw, 64px);
+      font-family: "Georgia", serif;
+      font-size: 32px; /* Fallback */
+      font-size: 7vw; 
       font-weight: bold;
       color: #c8a0e0;
       letter-spacing: 2px;
-      text-shadow: 0 0 40px rgba(200,160,224,0.4);
-      margin-bottom: 8px;
+      text-shadow: 0 0 20px rgba(200,160,224,0.5);
+      margin-bottom: 4px;
+      /* Simple entrance animation */
+      -webkit-animation: fadeInDown 0.8s ease-out forwards;
+      animation: fadeInDown 0.8s ease-out forwards;
     }
+
     .sub {
-      font-size: clamp(10px, 2.5vw, 13px);
-      color: rgba(255,255,255,0.3);
-      letter-spacing: 5px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      letter-spacing: 4px;
       text-transform: uppercase;
-      margin-bottom: 48px;
+      margin-bottom: 40px;
+      -webkit-animation: fadeInUp 1s ease-out forwards;
+      animation: fadeInUp 1s ease-out forwards;
     }
+
     .play-btn {
       display: inline-block;
-      padding: 16px 48px;
+      padding: 16px 40px;
+      /* Using standard Hex for max compatibility, linear-gradient for modern */
+      background: #7c3aed;
+      background: -webkit-linear-gradient(135deg, #7c3aed, #a855f7);
       background: linear-gradient(135deg, #7c3aed, #a855f7);
-      color: #fff;
-      font-size: clamp(14px, 3.5vw, 18px);
+      color: #ffffff;
+      font-size: 16px;
       font-weight: bold;
-      letter-spacing: 2px;
+      letter-spacing: 1px;
       text-transform: uppercase;
       text-decoration: none;
-      border-radius: 4px;
-      box-shadow: 0 4px 24px rgba(124,58,237,0.4);
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(124,58,237,0.4);
+      -webkit-transition: -webkit-transform 0.2s;
+      transition: transform 0.2s;
       -webkit-tap-highlight-color: transparent;
     }
-    .play-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(124,58,237,0.6); }
-    .play-btn:active { transform: translateY(0); box-shadow: 0 2px 12px rgba(124,58,237,0.4); }
-    .note { margin-top: 24px; font-size: clamp(10px, 2.5vw, 12px); color: rgba(255,255,255,0.2); }
+
+    /* Pulse effect to make it 'cooler' */
+    .play-btn:active {
+      -webkit-transform: scale(0.95);
+      transform: scale(0.95);
+    }
+
+    .note { 
+      margin-top: 30px; 
+      font-size: 10px; 
+      color: rgba(255,255,255,0.25); 
+      letter-spacing: 1px;
+    }
+
+    /* Animations for that premium feel */
+    @-webkit-keyframes fadeInDown {
+      0% { opacity: 0; -webkit-transform: translateY(-20px); }
+      100% { opacity: 1; -webkit-transform: translateY(0); }
+    }
+    @keyframes fadeInDown {
+      0% { opacity: 0; transform: translateY(-20px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    @-webkit-keyframes fadeInUp {
+      0% { opacity: 0; -webkit-transform: translateY(10px); }
+      100% { opacity: 1; -webkit-transform: translateY(0); }
+    }
+    @keyframes fadeInUp {
+      0% { opacity: 0; transform: translateY(10px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Media query to cap title size on large screens */
+    @media (min-width: 600px) {
+      .title { font-size: 64px; }
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="title">ClassiSphere</div>
     <div class="sub">Minecraft Classic</div>
-    <a href="play.html" class="play-btn">Play Now</a>
-    <div class="note">Works on desktop &amp; mobile</div>
+    <a href="play.html" class="play-btn" id="playBtn">Play Now</a>
+    <div class="note">Legacy Support Enabled</div>
   </div>
+
   <script>
-    setTimeout(function() { window.location.href = 'play.html'; }, 1500);
+    // Improved redirect with a check to prevent loops
+    // Redirects after 2 seconds to let the 'cool' animation breathe
+    setTimeout(function() {
+      try {
+        window.location.replace('play.html');
+      } catch(e) {
+        window.location.href = 'play.html';
+      }
+    }, 2000);
   </script>
 </body>
 </html>

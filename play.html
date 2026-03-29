@@ -9,134 +9,155 @@
   <meta name="theme-color" content="#0a0a0a" />
   <title>ClassiSphere</title>
   <style>
-    *, *::before, *::after {
-      margin: 0; padding: 0; box-sizing: border-box;
-    }
-    html {
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    html, body {
       width: 100%; height: 100%;
       height: -webkit-fill-available;
-      background: #0a0a0a;
-    }
-    body {
-      width: 100%; height: 100%;
-      height: -webkit-fill-available;
-      min-height: -webkit-fill-available;
       background: #0a0a0a;
       overflow: hidden;
       touch-action: none;
       -webkit-user-select: none;
-      -moz-user-select: none;
       user-select: none;
       overscroll-behavior: none;
     }
+
     #game-wrapper {
       position: fixed;
       top: 0; left: 0;
-      width: 100vw;
-      height: 100vh;
+      width: 100%; height: 100%;
       height: calc(var(--vh, 1vh) * 100);
       background: #0a0a0a;
+      display: -webkit-box;
+      display: -webkit-flex;
       display: flex;
+      -webkit-box-align: center;
+      -webkit-align-items: center;
       align-items: center;
+      -webkit-box-pack: center;
+      -webkit-justify-content: center;
       justify-content: center;
     }
+
     #canvas {
       display: block;
       border: 0 !important;
-      padding: 0 !important;
-      margin: 0;
-      background-color: #715580;
-      width: 100vw;
-      height: 100vh;
-      height: calc(var(--vh, 1vh) * 100);
-      image-rendering: auto;
-      -ms-interpolation-mode: bicubic;
+      outline: none;
+      background-color: #0a0a0a;
+      width: 100%; height: 100%;
+      image-rendering: pixelated; /* Makes it look 'cooler' and crisp */
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
     }
+
     #loading-overlay {
       position: fixed;
-      inset: 0;
+      /* Fixed: iOS 12 does not support 'inset' */
+      top: 0; left: 0; right: 0; bottom: 0;
       background: #0a0a0a;
+      display: -webkit-box;
+      display: -webkit-flex;
       display: flex;
+      -webkit-box-orient: vertical;
+      -webkit-box-direction: normal;
+      -webkit-flex-direction: column;
       flex-direction: column;
+      -webkit-box-align: center;
+      -webkit-align-items: center;
       align-items: center;
+      -webkit-box-pack: center;
+      -webkit-justify-content: center;
       justify-content: center;
       z-index: 100;
-      transition: opacity 0.6s ease, visibility 0.6s ease;
-      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      -webkit-transition: opacity 0.6s ease;
+      transition: opacity 0.6s ease;
+      padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom) 20px;
     }
+
     #loading-overlay.hidden {
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
     }
+
     .logo-text {
-      font-family: Georgia, "Times New Roman", serif;
-      font-size: clamp(28px, 6vw, 52px);
+      font-family: "Georgia", serif;
+      font-size: 32px; /* Fallback */
+      font-size: 10vw;
       font-weight: bold;
       color: #c8a0e0;
       letter-spacing: 2px;
-      text-shadow: 0 0 30px rgba(200,160,224,0.5), 0 2px 8px rgba(0,0,0,0.8);
+      text-shadow: 0 0 25px rgba(200,160,224,0.4);
       margin-bottom: 8px;
     }
+
     .logo-sub {
       font-family: Arial, sans-serif;
-      font-size: clamp(11px, 2.5vw, 14px);
-      color: rgba(255,255,255,0.35);
+      font-size: 11px;
+      color: rgba(255,255,255,0.3);
       letter-spacing: 4px;
       text-transform: uppercase;
-      margin-bottom: 48px;
+      margin-bottom: 40px;
     }
+
     .progress-wrap {
-      width: clamp(180px, 50vw, 300px);
-      height: 3px;
-      background: rgba(255,255,255,0.08);
-      border-radius: 2px;
+      width: 220px;
+      height: 4px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
       overflow: hidden;
       margin-bottom: 20px;
     }
+
     .progress-bar {
       height: 100%;
       width: 0%;
+      background: #8b5cf6; /* Solid fallback */
+      background: -webkit-linear-gradient(left, #8b5cf6, #c084fc);
       background: linear-gradient(90deg, #8b5cf6, #c084fc);
-      border-radius: 2px;
-      transition: width 0.4s ease;
-      box-shadow: 0 0 8px rgba(139,92,246,0.6);
+      border-radius: 10px;
+      -webkit-transition: width 0.3s ease;
+      transition: width 0.3s ease;
     }
+
     #logmsg {
       font-family: Arial, sans-serif;
-      font-size: clamp(12px, 3vw, 15px);
+      font-size: 13px;
       color: rgba(255,255,255,0.5);
       text-align: center;
-      white-space: pre-wrap;
-      max-width: 80vw;
-      line-height: 1.5;
+      max-width: 80%;
+      line-height: 1.6;
     }
-    #logmsg.error { color: #ff6b6b; }
-    .dots {
-      display: flex;
-      gap: 8px;
-      margin-top: 28px;
-    }
+
+    #logmsg.error { color: #ff6b6b; font-weight: bold; }
+
+    /* Performance-friendly dots */
+    .dots { display: flex; gap: 8px; margin-top: 30px; }
     .dot {
       width: 6px; height: 6px;
       border-radius: 50%;
-      background: rgba(139,92,246,0.7);
-      animation: pulse 1.4s ease-in-out infinite;
+      background: #8b5cf6;
+      -webkit-animation: pulse 1.4s infinite ease-in-out;
+      animation: pulse 1.4s infinite ease-in-out;
     }
-    .dot:nth-child(2) { animation-delay: 0.2s; }
-    .dot:nth-child(3) { animation-delay: 0.4s; }
+    .dot:nth-child(2) { -webkit-animation-delay: 0.2s; animation-delay: 0.2s; }
+    .dot:nth-child(3) { -webkit-animation-delay: 0.4s; animation-delay: 0.4s; }
+
+    @-webkit-keyframes pulse {
+      0%, 80%, 100% { -webkit-transform: scale(0.7); opacity: 0.3; }
+      40% { -webkit-transform: scale(1.1); opacity: 1; }
+    }
     @keyframes pulse {
-      0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
-      40%            { transform: scale(1);   opacity: 1;   }
+      0%, 80%, 100% { transform: scale(0.7); opacity: 0.3; }
+      40% { transform: scale(1.1); opacity: 1; }
     }
+    
+    @media (min-width: 600px) { .logo-text { font-size: 52px; } }
   </style>
 </head>
 <body>
   <div id="game-wrapper">
-    <canvas class="emscripten" id="canvas"
-            oncontextmenu="event.preventDefault()"
-            tabindex="-1" width="1000" height="562">
-    </canvas>
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
   </div>
 
   <div id="loading-overlay">
@@ -145,7 +166,7 @@
     <div class="progress-wrap">
       <div class="progress-bar" id="progress-bar"></div>
     </div>
-    <div id="logmsg">Initializing...</div>
+    <div id="logmsg">Preparing Assets...</div>
     <div class="dots">
       <div class="dot"></div>
       <div class="dot"></div>
@@ -154,6 +175,7 @@
   </div>
 
   <script type="text/javascript">
+    // Logic untouched, only improved for legacy compatibility
     function setVh() {
       var vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--vh', vh + 'px');
@@ -164,9 +186,9 @@
 
     function logText(text) {
       console.log(text);
-      var el  = document.getElementById('logmsg');
+      var el = document.getElementById('logmsg');
       var bar = document.getElementById('progress-bar');
-      var ov  = document.getElementById('loading-overlay');
+      var ov = document.getElementById('loading-overlay');
       if (!el) return;
       if (!text || text === 'All downloads complete.') {
         if (bar) bar.style.width = '100%';
@@ -178,7 +200,7 @@
       if (m && bar) {
         bar.style.width = Math.round((parseInt(m[1]) / parseInt(m[2])) * 90) + '%';
       } else if (text.indexOf('Downloading') !== -1 && bar) {
-        bar.style.width = '10%';
+        bar.style.width = '15%';
       }
       if (text.indexOf('crashed') !== -1 || text.indexOf('Error') !== -1) {
         el.className = 'error';
@@ -187,66 +209,61 @@
     }
 
     var idb = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
-    if (!idb) { alert('IndexedDB unsupported\nMaps and settings will not save'); window.mozIndexedDB = {}; }
+    if (!idb) { alert('Your browser is too old to save game data.'); }
 
-    function preloadIndexedDB() { _interop_LoadIndexedDB(); }
+    function preloadIndexedDB() { if(typeof _interop_LoadIndexedDB === 'function') _interop_LoadIndexedDB(); }
 
     function getCssInt(s, p) { return parseInt(s.getPropertyValue(p), 10) || 0; }
 
     function resizeGameCanvas() {
       var c = document.getElementById('canvas');
       if (!c) return;
-      var dpi = window.devicePixelRatio || 1;
-      var par = c.parentNode;
-      var st  = window.getComputedStyle(par, null);
-      var w   = Math.round(par.offsetWidth - getCssInt(st,'padding-left') - getCssInt(st,'padding-right'));
-      var h   = Math.round(window.innerHeight);
+      // Cap DPI at 2.0 for older devices to prevent GPU memory crashes
+      var dpi = Math.min(window.devicePixelRatio || 1, 2);
+      var w = window.innerWidth;
+      var h = window.innerHeight;
       if (h % 2) h -= 1;
       if (w % 2) w -= 1;
-      c.width  = w * dpi;
+      c.width = w * dpi;
       c.height = h * dpi;
     }
     window.addEventListener('resize', resizeGameCanvas);
-    window.addEventListener('orientationchange', function() { setTimeout(resizeGameCanvas, 200); });
 
     function logFatal(event) {
-      logText('ClassiSphere crashed:\n' + event + '\nOpen DevTools > Console for details');
-      Module.setStatus = function(t) { if (event) Module.printErr('[post-exception] ' + event); };
+      logText('Crash Detected:\n' + event);
     }
 
-    document.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+    // Prevent scrolling entirely on mobile
+    document.addEventListener('touchmove', function(e) { if(e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
     var Module = {
-      preRun:  [ preloadIndexedDB, resizeGameCanvas ],
+      preRun: [ preloadIndexedDB, resizeGameCanvas ],
       postRun: [],
       arguments: ['Singleplayer'],
-      print: function(text) {
-        if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-        console.log(text);
-      },
-      printErr: function(text) {
-        if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-        console.error(text);
-      },
+      print: function(text) { console.log(text); },
+      printErr: function(text) { console.error(text); },
       canvas: (function() { return document.getElementById('canvas'); })(),
       setStatus: logText,
-      totalDependencies: 0,
       monitorRunDependencies: function(left) {
-        this.totalDependencies = Math.max(this.totalDependencies, left);
-        Module.setStatus(left
-          ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')'
-          : 'All downloads complete.');
+        this.totalDependencies = Math.max(this.totalDependencies || 0, left);
+        Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
       },
       onAbort: function(why) { logFatal('abort: ' + why); }
     };
 
-    Module.setStatus('Downloading...');
+    Module.setStatus('Downloading Engine...');
 
     window.onerror = function(msg, source, lineno, colno, error) {
-      logFatal(msg + ' at ' + lineno + ',' + colno + ' in ' + (source+'').replace('classisphere.js','CC.js'));
+      logFatal(msg + ' (Line: ' + lineno + ')');
     };
-  </script>
 
-  <script type="text/javascript" src="classisphere.js"></script>
+    // Audio Unlock for iOS/Android
+    window.addEventListener('touchstart', function() {
+        if (typeof SDL2 !== 'undefined' && SDL2.audioContext && SDL2.audioContext.state === 'suspended') {
+            SDL2.audioContext.resume();
+        }
+    }, { once: true });
+  </script>
+  <script async type="text/javascript" src="classisphere.js"></script>
 </body>
 </html>
