@@ -69,9 +69,9 @@ jobs:
           [ -f audio.zip ] && cp audio.zip deploy/audio/ || echo "No audio.zip"
           ls -la deploy/
 
-      - name: Add timestamp file to force commit
+     - name: Add timestamp file to force commit
   run: |
-    python3 -c "import datetime; print('last_update=' + datetime.datetime.utcnow().isoformat() + 'Z')" > deploy/update.txt
+    date -u --iso-8601=seconds | sed 's/+00:00/Z/' > deploy/update.txt
 
       - name: Deploy to web branch
         uses: peaceiris/actions-gh-pages@v4
