@@ -52,19 +52,12 @@ jobs:
           cp classisphere.js ClassiCube.js
           echo "Build done!"; ls -lh classisphere.js
 
-      - name: Download assets
+      - name: Create deployment structure (JS only)
         run: |
-          wget -q https://www.classicube.net/static/default.zip || { echo "ERROR: default.zip failed"; exit 1; }
-          wget -q https://www.classicube.net/static/audio.zip || echo "Audio skipped"
-          ls -lh *.zip 2>/dev/null
-
-      - name: Create deployment structure
-        run: |
-          mkdir -p deploy/texpacks deploy/audio
+          mkdir -p deploy
           cp classisphere.js deploy/
           cp ClassiCube.js deploy/
-          cp default.zip deploy/texpacks/
-          [ -f audio.zip ] && cp audio.zip deploy/audio/ || echo "No audio.zip"
+          echo "Deployment structure created (no assets copied)"
           ls -la deploy/
 
       - name: Add timestamp file to force commit
@@ -82,7 +75,6 @@ jobs:
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
           commit_message: 'Deploy ClassiSphere - ${{ github.sha }}'
-
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
