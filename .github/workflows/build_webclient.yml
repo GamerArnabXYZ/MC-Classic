@@ -69,6 +69,10 @@ jobs:
           [ -f audio.zip ] && cp audio.zip deploy/audio/ || echo "No audio.zip"
           ls -la deploy/
 
+      - name: Add timestamp file to force commit
+  run: |
+    echo "last_update=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > deploy/update.txt
+
       - name: Deploy to web branch
         uses: peaceiris/actions-gh-pages@v4
         with:
