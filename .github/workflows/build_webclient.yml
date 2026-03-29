@@ -74,7 +74,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: web
           publish_dir: ./deploy
-          force_orphan: true
+          force_orphan: false      # <- change
+          keep_files: true         # <- new
           user_name: 'github-actions[bot]'
           user_email: 'github-actions[bot]@users.noreply.github.com'
           commit_message: 'Deploy ClassiSphere - ${{ github.sha }}'
